@@ -1,0 +1,7 @@
+{
+  "watch": ["src/server"],
+  "exec": "bun run src/server/index.ts",
+  "ext": "ts,js",
+  "ignore": ["src/pages/*", "src/components/*", "tests/*", "dist/*", "styled-system/*"],
+  "delay": "1000"
+}

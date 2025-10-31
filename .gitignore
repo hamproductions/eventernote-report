@@ -45,3 +45,5 @@ drizzle/migrations/*.sql
 
 .sample-*
 .reference-*
+
+.bun-build

@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+
+# Build outputs (built in Docker)
+dist
+build
+.vite
+styled-system
+
+# Git & Version Control
+.git
+.github
+
+# IDE & Editor
+.vscode
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/__tests__
+coverage
+
+# Development configs
+nodemon.json
+.eslintrc*
+.prettierrc*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc
+.sample-react-project
+scripts/test-*.ts
+.turbo

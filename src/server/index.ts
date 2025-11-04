@@ -5,7 +5,6 @@ import { staticPlugin } from '@elysiajs/static';
 import { logger } from '@bogeychan/elysia-logger';
 import { connect } from 'elysia-connect-middleware';
 import { renderPage } from 'vike/server';
-import { db } from '../db';
 import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes } from './routes';
 
 const PORT = process.env.PORT || 3002;
@@ -33,9 +32,6 @@ app
   // Middleware
   .use(logger())
   .use(cors({ credentials: true }))
-
-  // Global state
-  .decorate('db', db)
 
   // Health check
   .use(healthRoute)

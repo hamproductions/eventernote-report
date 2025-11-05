@@ -196,7 +196,14 @@ export function ExportPreview({
   }, [chartAnalytics.dateEventMap]);
 
   return (
-    <Box position="absolute" w="0" h="0" opacity="0">
+    <Box
+      position="fixed"
+      left="-9999px"
+      top="0"
+      visibility="hidden"
+      pointerEvents="none"
+      zIndex="-1"
+    >
       <Box
         position="relative"
         ref={exportRef}

@@ -488,6 +488,11 @@ export default function Page() {
                     size="lg"
                     colorPalette="blue"
                     disabled={!inputValue.trim()}
+                    className={css({
+                      cursor: 'pointer',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent'
+                    })}
                   >
                     Generate Report
                   </Button>

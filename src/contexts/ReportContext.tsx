@@ -22,8 +22,18 @@ export function ReportProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('eventernote-user-id');
-    if (saved) setUserId(saved);
+    // Check URL query parameter first
+    const urlParams = new URLSearchParams(window.location.search);
+    const userParam = urlParams.get('user');
+
+    if (userParam) {
+      setUserId(userParam);
+      localStorage.setItem('eventernote-user-id', userParam);
+    } else {
+      // Fall back to localStorage
+      const saved = localStorage.getItem('eventernote-user-id');
+      if (saved) setUserId(saved);
+    }
   }, []);
 
   const handleSetUserId = (id: string | null) => {

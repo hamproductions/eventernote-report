@@ -42,6 +42,10 @@ export function ReportProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('eventernote-user-id', id);
     } else {
       localStorage.removeItem('eventernote-user-id');
+      setDateRange({
+        startDate: new Date(new Date().getFullYear(), 0, 1),
+        endDate: new Date()
+      });
     }
   };
 

@@ -28,7 +28,6 @@ export async function fetchAttendedEvents(
       const dateElement = element.querySelector('div.date > p');
       const placeElement = element.querySelector('div.place > a');
 
-      // Extract artists using EXACT selector from reference project
       const artistElements = element.querySelectorAll('div.event > div.actor > ul > li > a');
       const artists = Array.from(artistElements)
         .map(el => el.textContent?.trim())

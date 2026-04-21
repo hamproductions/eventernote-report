@@ -88,7 +88,7 @@ export function RadarChart({ radarStats }: RadarChartProps) {
       <Card.Body>
         <Box h="500px" w="full">
           <ResponsiveContainer width="100%" height="100%">
-            <RechartsRadarChart data={chartData}>
+            <RechartsRadarChart data={chartData} outerRadius="60%">
               <PolarGrid
                 stroke={token.var("colors.border.default")}
                 opacity={0.3}

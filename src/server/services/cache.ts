@@ -34,7 +34,6 @@ class MemoryCache {
     this.cache.clear();
   }
 
-  // Clean up expired entries
   cleanup(): void {
     const now = Date.now();
     for (const [key, entry] of this.cache.entries()) {

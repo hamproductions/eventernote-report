@@ -5,7 +5,7 @@ import { staticPlugin } from '@elysiajs/static';
 import { logger } from '@bogeychan/elysia-logger';
 import { connect } from 'elysia-connect-middleware';
 import { renderPage } from 'vike/server';
-import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes } from './routes';
+import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes, userProfileRoutes } from './routes';
 
 const PORT = process.env.PORT || 3002;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -42,6 +42,7 @@ app
       .use(eventRoutes)
       .use(statsRoutes)
       .use(favoriteArtistsRoutes)
+      .use(userProfileRoutes)
   )
 
   // Vike SSR handler - must be last

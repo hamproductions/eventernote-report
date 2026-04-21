@@ -19,10 +19,12 @@ import {
   RecentEventsList,
   FilterControls,
   TopArtistsVenues,
+  FavoriteArtistsAttendance,
   ArtistAttendanceGrowth,
   MonthlyBreakdown,
   ExportPreview,
-  RadarChart
+  RadarChart,
+  Highlights
 } from '~/components/dashboard';
 import type { EnhancedEvent } from '~/shared/types/event';
 
@@ -43,6 +45,27 @@ interface FavoriteArtist {
 interface FavoriteArtistsResponse {
   success: boolean;
   data: FavoriteArtist[];
+}
+
+interface ArtistAttendance {
+  name: string;
+  href: string;
+  userCount: number;
+  totalEvents: number;
+  percentage: number;
+  eventDates: string[];
+}
+
+interface UserProfileResponse {
+  success: boolean;
+  data: {
+    username: string;
+    displayName: string;
+    following: number;
+    followers: number;
+    totalEvents: number;
+    artistAttendance: ArtistAttendance[];
+  };
 }
 
 export default function Page() {
@@ -117,6 +140,17 @@ export default function Page() {
       return res.json();
     },
     enabled: !!userId
+  });
+
+  const { data: userProfileData } = useQuery<UserProfileResponse>({
+    queryKey: ['userProfile', userId],
+    queryFn: async () => {
+      const res = await fetch(`/api/user-profile/${userId}`);
+      if (!res.ok) throw new Error('Failed to fetch user profile');
+      return res.json();
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 10
   });
 
   // Filter events by date range only (for statistics)
@@ -260,6 +294,49 @@ export default function Page() {
       radarStats: chartData.radarStats
     };
   }, [chartFilteredEvents, artistsViewLimit]);
+
+  const filteredFavoriteArtistCounts = useMemo(() => {
+    if (!chartFilteredEvents.length || !userProfileData?.data?.artistAttendance) return undefined;
+    const favoriteNames = new Set(userProfileData.data.artistAttendance.map(a => a.name));
+    const counts = new Map<string, number>();
+    for (const event of chartFilteredEvents) {
+      if (!event.artists) continue;
+      for (const artist of event.artists) {
+        if (favoriteNames.has(artist)) {
+          counts.set(artist, (counts.get(artist) || 0) + 1);
+        }
+      }
+    }
+    return counts;
+  }, [chartFilteredEvents, userProfileData]);
+
+  const filteredArtistTotals = useMemo(() => {
+    if (!userProfileData?.data?.artistAttendance) return undefined;
+    const totals = new Map<string, number>();
+    const startStr = dateRange.startDate?.toISOString().split('T')[0];
+    const endStr = dateRange.endDate?.toISOString().split('T')[0];
+    for (const artist of userProfileData.data.artistAttendance) {
+      if (!artist.eventDates?.length) continue;
+      const count = artist.eventDates.filter(d => {
+        if (startStr && d < startStr) return false;
+        if (endStr && d > endStr) return false;
+        return true;
+      }).length;
+      totals.set(artist.name, count);
+    }
+    return totals;
+  }, [userProfileData, dateRange]);
+
+  const favoriteAttendanceData = useMemo(() => {
+    if (!filteredFavoriteArtistCounts || !filteredArtistTotals || !userProfileData?.data?.artistAttendance) return [];
+    return userProfileData.data.artistAttendance.map(a => {
+      const attended = filteredFavoriteArtistCounts.get(a.name) || 0;
+      const total = filteredArtistTotals.get(a.name) || 0;
+      const missed = total - attended;
+      const pct = total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+      return { name: a.name, attended, total, missed, pct };
+    }).filter(a => a.total > 0);
+  }, [filteredFavoriteArtistCounts, filteredArtistTotals, userProfileData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -515,9 +592,17 @@ export default function Page() {
       <VStack gap="8" alignItems="stretch">
         <DashboardHeader
           colorMode={colorMode}
+          userProfile={userProfileData?.data}
           onExportStats={exportStatsAsPNG}
           onToggleColorMode={() => setColorMode?.(colorMode === 'dark' ? 'light' : 'dark')}
-          onChangeUser={() => setUserId(null)}
+          onChangeUser={() => {
+            setUserId(null);
+            setActivePreset('thisYear');
+            setFilterByFavorites(false);
+            setArtistsViewLimit(10);
+            setVenuesViewLimit(10);
+            setEventsViewLimit(20);
+          }}
         />
 
         <FilterControls
@@ -533,6 +618,31 @@ export default function Page() {
 
         {isLoading && <Text color="fg.muted">Loading events...</Text>}
         {isError && <Text color="fg.error">Error loading events</Text>}
+        {!isLoading && !isError && eventsData && !filteredEvents.length && (
+          <Card.Root>
+            <Card.Body>
+              <VStack gap="4" alignItems="center" py="8">
+                <Text size="lg" fontWeight="medium" color="fg.default">
+                  No events found
+                </Text>
+                <Text size="sm" color="fg.muted" textAlign="center">
+                  No attended events were found for this user in the selected date range.
+                  Try a different date range or check the User ID.
+                </Text>
+                <Button
+                  variant="outline"
+                  colorPalette="blue"
+                  onClick={() => {
+                    setUserId(null);
+                    setActivePreset('thisYear');
+                  }}
+                >
+                  Try Another User
+                </Button>
+              </VStack>
+            </Card.Body>
+          </Card.Root>
+        )}
 
         {analytics && (
           <Box ref={statsRef} position="relative">
@@ -570,6 +680,31 @@ export default function Page() {
                 <StatsCards analytics={analytics} />
               </Grid>
 
+              {/* Highlights */}
+              {chartAnalytics && analytics && (
+                <Highlights
+                  totalEvents={analytics.totalEvents}
+                  uniqueVenues={analytics.uniqueVenues}
+                  uniqueArtists={analytics.uniqueArtists}
+                  totalArtistAppearances={analytics.totalArtistAppearances}
+                  avgEventsPerMonth={parseFloat(String(analytics.avgEventsPerMonth))}
+                  topDayOfWeek={analytics.topDayOfWeek ? { day: analytics.topDayOfWeek[0], count: analytics.topDayOfWeek[1] } : { day: "N/A", count: 0 }}
+                  busiestMonth={analytics.busiestMonth ? { month: analytics.busiestMonth[0], count: analytics.busiestMonth[1] } : { month: "N/A", count: 0 }}
+                  longestDailyStreak={analytics.streaks.daily.longestStreak}
+                  longestWeeklyStreak={analytics.streaks.weekly.longestStreak}
+                  maxEventsPerDay={analytics.multiEventDayStats.maxEventsInDay}
+                  maxEventsPerDayDate={analytics.multiEventDayStats.maxEventsInDayDate || undefined}
+                  weekendPercentage={analytics.weekendStats.weekendEventPercentage}
+                  topArtist={analytics.mostAttendedArtist ? { name: analytics.mostAttendedArtist[0], count: analytics.mostAttendedArtist[1] } : undefined}
+                  topVenue={analytics.mostVisitedVenue ? { name: analytics.mostVisitedVenue[0], count: analytics.mostVisitedVenue[1].length } : undefined}
+                  favoriteAttendance={favoriteAttendanceData.length > 0 ? (() => {
+                    const best = [...favoriteAttendanceData].sort((a, b) => b.pct - a.pct)[0];
+                    return best ? { name: best.name, pct: best.pct } : undefined;
+                  })() : undefined}
+                  daysActivePercentage={analytics.daysSpentPercentage}
+                />
+              )}
+
               {/* Event Heatmap and Monthly Activity - Side by Side */}
               {chartAnalytics && (
                 <Grid
@@ -602,6 +737,11 @@ export default function Page() {
                 />
               )}
 
+              {/* Favorite Artists Attendance */}
+              {favoriteAttendanceData.length > 0 && (
+                <FavoriteArtistsAttendance artists={favoriteAttendanceData} />
+              )}
+
               {/* Top Artists & Venues */}
               {chartAnalytics && (
                 <TopArtistsVenues
@@ -612,6 +752,9 @@ export default function Page() {
                   uniqueArtists={chartAnalytics.uniqueArtists}
                   uniqueVenues={chartAnalytics.uniqueVenues}
                   events={chartFilteredEvents}
+                  artistAttendance={userProfileData?.data?.artistAttendance}
+                  filteredArtistCounts={filteredFavoriteArtistCounts}
+                  filteredArtistTotals={filteredArtistTotals}
                   onCycleArtistsView={cycleArtistsView}
                   onCycleVenuesView={cycleVenuesView}
                   getArtistsViewLabel={getArtistsViewLabel}

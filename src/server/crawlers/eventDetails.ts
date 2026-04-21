@@ -111,7 +111,6 @@ export async function enrichEventsWithArtists(
           console.error(`Failed to enrich event ${event.href}:`, error);
           const parsedDate = new Date(event.date);
 
-          // Return event with empty artists array
           return {
             ...event,
             artists: [],

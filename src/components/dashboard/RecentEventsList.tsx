@@ -26,12 +26,12 @@ export function RecentEventsList({
   return (
     <Card.Root>
       <Card.Header>
-        <HStack justifyContent="space-between">
+        <HStack justifyContent="space-between" flexWrap="wrap" gap="3">
           <Box>
             <Card.Title>Recent Events</Card.Title>
             <Card.Description>Your latest attended events</Card.Description>
           </Box>
-          <HStack gap="2">
+          <HStack gap="2" flexWrap="wrap">
             <Button size="sm" variant="outline" onClick={onExportPNG}>
               Export PNG
             </Button>

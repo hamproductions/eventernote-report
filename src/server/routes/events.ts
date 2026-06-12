@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
-import { fetchAttendedEvents } from '../crawlers';
+import { fetchAttendedEvents, searchEvents } from '../crawlers';
+import type { SearchedEvent } from '../crawlers';
 import { cache } from '../services/cache';
 
 export const eventRoutes = new Elysia({ prefix: '/events' })
@@ -68,6 +69,58 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
       query: t.Object({
         startDate: t.Optional(t.String()),
         endDate: t.Optional(t.String())
+      })
+    }
+  )
+
+  .get(
+    '/search',
+    async ({ query }) => {
+      const { q, limit = 20 } = query;
+
+      try {
+        console.log(`🔍 Searching events for keyword: ${q}`);
+
+        const cacheKey = `search:${q}:${limit}`;
+        const cachedEvents = cache.get<SearchedEvent[]>(cacheKey);
+
+        if (cachedEvents) {
+          console.log(`📦 Returning ${cachedEvents.length} cached search results`);
+          return {
+            success: true,
+            data: {
+              events: cachedEvents,
+              totalCount: cachedEvents.length,
+              cached: true
+            }
+          };
+        }
+
+        const events = await searchEvents(q, limit);
+
+        return {
+          success: true,
+          data: {
+            events,
+            totalCount: events.length,
+            cached: false
+          }
+        };
+      } catch (error) {
+        console.error('❌ Error searching events:', error);
+        return {
+          success: false,
+          error: {
+            code: 'FETCH_ERROR',
+            message: error instanceof Error ? error.message : 'Failed to search events'
+          }
+        };
+      }
+    },
+    {
+      query: t.Object({
+        q: t.String(),
+        limit: t.Optional(t.Numeric())
       })
     }
   )

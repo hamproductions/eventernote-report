@@ -6,6 +6,7 @@ import { logger } from '@bogeychan/elysia-logger';
 import { connect } from 'elysia-connect-middleware';
 import { renderPage } from 'vike/server';
 import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes, userProfileRoutes } from './routes';
+import { rateLimit } from './services/rateLimit';
 
 const PORT = process.env.PORT || 3002;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -39,6 +40,7 @@ app
   // API routes
   .group('/api', (api) =>
     api
+      .use(rateLimit())
       .use(eventRoutes)
       .use(statsRoutes)
       .use(favoriteArtistsRoutes)

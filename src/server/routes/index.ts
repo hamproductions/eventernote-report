@@ -3,3 +3,4 @@ export { statsRoutes } from './stats';
 export { healthRoute } from './health';
 export { favoriteArtistsRoutes } from './favoriteArtists';
 export { userProfileRoutes } from './userProfile';
+export { artistRoutes } from './artists';

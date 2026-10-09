@@ -2,8 +2,14 @@ import { Elysia, t } from 'elysia';
 import { fetchAttendedEvents, searchEvents } from '../crawlers';
 import type { SearchedEvent } from '../crawlers';
 import { cache } from '../services/cache';
+import { attendanceCacheKey, getAttendanceProgress } from '../crawlers/attendedEvents';
 
 export const eventRoutes = new Elysia({ prefix: '/events' })
+  .get('/user/:userId/progress', ({ params, query }) =>
+    getAttendanceProgress(params.userId, query.startDate, query.endDate), {
+    params: t.Object({ userId: t.String() }),
+    query: t.Object({ startDate: t.Optional(t.String()), endDate: t.Optional(t.String()) })
+  })
   .get(
     '/user/:userId',
     async ({ params, query }) => {
@@ -14,15 +20,16 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
         console.log(`📡 Fetching events for user: ${userId}`);
 
         // Check memory cache first
-        const cacheKey = `events:${userId}:${startDate || 'all'}:${endDate || 'all'}`;
-        const cached = cache.get<any>(cacheKey);
+        const cacheKey = attendanceCacheKey(userId, startDate, endDate);
+        const cached = cache.get<any[]>(cacheKey);
 
         if (cached) {
-          console.log(`📦 Returning ${cached.events.length} cached events`);
+          console.log(`📦 Returning ${cached.length} cached events`);
           return {
             success: true,
             data: {
-              ...cached,
+              events: cached,
+              totalCount: cached.length,
               cached: true
             }
           };
@@ -31,7 +38,9 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
         // Crawl Eventernote (now includes artists directly!)
         console.log('🕷️  Crawling Eventernote...');
         const events = await fetchAttendedEvents(userId, {
-          limit: 10000
+          limit: 10000,
+          startDate,
+          endDate
         });
 
         // Store in memory cache (5 min TTL)
@@ -39,8 +48,6 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
           events,
           totalCount: events.length
         };
-
-        cache.set(cacheKey, result, 5 * 60); // 5 minutes
 
         console.log(`✅ Successfully fetched ${events.length} events with artists`);
 

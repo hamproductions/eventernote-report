@@ -5,7 +5,7 @@ import { staticPlugin } from '@elysiajs/static';
 import { logger } from '@bogeychan/elysia-logger';
 import { connect } from 'elysia-connect-middleware';
 import { renderPage } from 'vike/server';
-import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes, userProfileRoutes } from './routes';
+import { eventRoutes, statsRoutes, healthRoute, favoriteArtistsRoutes, userProfileRoutes, artistRoutes } from './routes';
 import { rateLimit } from './services/rateLimit';
 
 const PORT = process.env.PORT || 3002;
@@ -45,6 +45,7 @@ app
       .use(statsRoutes)
       .use(favoriteArtistsRoutes)
       .use(userProfileRoutes)
+      .use(artistRoutes)
   )
 
   // Vike SSR handler - must be last
@@ -64,7 +65,7 @@ app
     });
   })
 
-  .listen(PORT);
+  .listen({ port: PORT, idleTimeout: 120 });
 
 console.log(`🦊 Elysia server running at http://localhost:${PORT}`);
 

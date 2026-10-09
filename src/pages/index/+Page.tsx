@@ -27,6 +27,9 @@ import {
   Highlights
 } from '~/components/dashboard';
 import type { EnhancedEvent } from '~/shared/types/event';
+import { formatDate } from '~/shared/utils/dateUtils';
+import { ManualArtistAttendance } from '~/components/dashboard/ManualArtistAttendance';
+import { LoadingStatus } from '~/components/dashboard/LoadingStatus';
 
 interface EventsResponse {
   success: boolean;
@@ -102,31 +105,35 @@ export default function Page() {
 
   // Serialize date range for stable query key
   const dateRangeKey = useMemo(() => ({
-    start: dateRange.startDate?.toISOString().split('T')[0] || null,
-    end: dateRange.endDate?.toISOString().split('T')[0] || null
+    start: dateRange.startDate ? formatDate(dateRange.startDate) : null,
+    end: dateRange.endDate ? formatDate(dateRange.endDate) : null
   }), [dateRange]);
 
   const {
     data: eventsData,
     isLoading,
     isError,
+    error,
     isFetching
   } = useQuery<EventsResponse>({
     queryKey: ['events', userId, dateRangeKey],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (dateRange.startDate) {
-        params.set('startDate', dateRange.startDate.toISOString().split('T')[0]);
+        params.set('startDate', formatDate(dateRange.startDate));
       }
       if (dateRange.endDate) {
-        params.set('endDate', dateRange.endDate.toISOString().split('T')[0]);
+        params.set('endDate', formatDate(dateRange.endDate));
       }
 
       const res = await fetch(`/api/events/user/${userId}?${params}`);
       if (!res.ok) throw new Error('Failed to fetch events');
-      return res.json();
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error?.message || 'Failed to fetch events');
+      return result;
     },
     enabled: !!userId,
+    retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     placeholderData: (previousData) => previousData // Keep previous data while fetching
@@ -142,12 +149,35 @@ export default function Page() {
     enabled: !!userId
   });
 
-  const { data: userProfileData } = useQuery<UserProfileResponse>({
-    queryKey: ['userProfile', userId],
+  const { data: loadingProgress } = useQuery<{ stage: string; loaded: number; total: number }>({
+    queryKey: ['attendance-progress', userId, dateRangeKey],
     queryFn: async () => {
-      const res = await fetch(`/api/user-profile/${userId}`);
+      const params = new URLSearchParams();
+      if (dateRangeKey.start) params.set('startDate', dateRangeKey.start);
+      if (dateRangeKey.end) params.set('endDate', dateRangeKey.end);
+      const response = await fetch(`/api/events/user/${encodeURIComponent(userId!)}/progress?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch loading progress');
+      return response.json();
+    },
+    enabled: !!userId && isFetching,
+    refetchInterval: isFetching ? 1000 : false,
+    retry: false
+  });
+  const loadingMessage = loadingProgress?.stage === 'details'
+    ? `Verifying event details: ${loadingProgress.loaded} / ${loadingProgress.total}`
+    : 'Loading Eventernote lists for the selected date range...';
+
+  const { data: userProfileData, isLoading: isProfileLoading, error: profileError } = useQuery<UserProfileResponse>({
+    queryKey: ['userProfile', userId, dateRangeKey],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateRangeKey.start) params.set('startDate', dateRangeKey.start);
+      if (dateRangeKey.end) params.set('endDate', dateRangeKey.end);
+      const res = await fetch(`/api/user-profile/${userId}?${params}`);
       if (!res.ok) throw new Error('Failed to fetch user profile');
-      return res.json();
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Failed to fetch user profile');
+      return result;
     },
     enabled: !!userId,
     staleTime: 1000 * 60 * 10
@@ -162,17 +192,17 @@ export default function Page() {
     return eventsData.data.events
       .map(event => ({
         ...event,
-        parsedDate: new Date(event.date)
+        parsedDate: new Date(`${event.date.slice(0, 10)}T00:00:00`)
       }))
       .filter(event => {
-        const eventDate = event.parsedDate;
+        const eventDate = event.date.slice(0, 10);
 
         // Exclude future events
-        if (eventDate > now) return false;
+        if (eventDate > formatDate(now)) return false;
 
         // Apply date range filters
-        if (dateRange.startDate && eventDate < dateRange.startDate) return false;
-        if (dateRange.endDate && eventDate > dateRange.endDate) return false;
+        if (dateRange.startDate && eventDate < formatDate(dateRange.startDate)) return false;
+        if (dateRange.endDate && eventDate > formatDate(dateRange.endDate)) return false;
 
         return true;
       });
@@ -313,8 +343,9 @@ export default function Page() {
   const filteredArtistTotals = useMemo(() => {
     if (!userProfileData?.data?.artistAttendance) return undefined;
     const totals = new Map<string, number>();
-    const startStr = dateRange.startDate?.toISOString().split('T')[0];
-    const endStr = dateRange.endDate?.toISOString().split('T')[0];
+    const startStr = dateRange.startDate ? formatDate(dateRange.startDate) : undefined;
+    const today = formatDate(new Date());
+    const endStr = dateRange.endDate ? [formatDate(dateRange.endDate), today].sort()[0] : today;
     for (const artist of userProfileData.data.artistAttendance) {
       if (!artist.eventDates?.length) continue;
       const count = artist.eventDates.filter(d => {
@@ -616,9 +647,18 @@ export default function Page() {
           onActivePresetChange={setActivePreset}
         />
 
-        {isLoading && <Text color="fg.muted">Loading events...</Text>}
-        {isError && <Text color="fg.error">Error loading events</Text>}
-        {!isLoading && !isError && eventsData && !filteredEvents.length && (
+        {isFetching && (
+          <LoadingStatus label="Loading your report" detail={loadingProgress?.stage === 'details'
+            ? `${loadingProgress.loaded} of ${loadingProgress.total} events checked`
+            : 'Finding events in this date range'} loaded={loadingProgress?.loaded} total={loadingProgress?.total} />
+        )}
+        <ManualArtistAttendance key={userId} userId={userId} dateRange={dateRange} />
+        {isProfileLoading && (
+          <LoadingStatus label="Loading favorite attendance" detail="Checking artist events for this date range" />
+        )}
+        {profileError && <Text color="fg.error" role="alert">{profileError.message}</Text>}
+        {isError && <Text color="fg.error" role="alert">{error?.message || 'Error loading events'}</Text>}
+        {!isFetching && !isError && eventsData && !filteredEvents.length && (
           <Card.Root>
             <Card.Body>
               <VStack gap="4" alignItems="center" py="8">
@@ -661,7 +701,7 @@ export default function Page() {
                 alignItems="center"
                 justifyContent="center"
               >
-                <Text color="fg.muted" fontWeight="medium">Updating...</Text>
+                <Text color="fg.muted" fontWeight="medium" role="status">{loadingMessage}</Text>
               </Box>
             )}
             <VStack gap="8" alignItems="stretch">

@@ -78,7 +78,7 @@ export function DashboardHeader({
             <Text size="sm" fontWeight="bold" color="fg.default">
               {userProfile.totalEvents}
             </Text>
-            <Text size="sm" color="fg.muted">Total Events</Text>
+            <Text size="sm" color="fg.muted">Registrations (incl. upcoming)</Text>
           </HStack>
         </HStack>
       )}

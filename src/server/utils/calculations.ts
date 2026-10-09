@@ -1156,7 +1156,7 @@ export function filterEventsByDateRange(
   if (!startDate && !endDate) return events;
 
   return events.filter((event) => {
-    const eventDate = event.parsedDate.toISOString().split("T")[0];
+    const eventDate = event.date.slice(0, 10);
 
     if (startDate && eventDate < startDate) return false;
     if (endDate && eventDate > endDate) return false;

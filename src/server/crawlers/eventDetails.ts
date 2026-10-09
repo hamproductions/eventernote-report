@@ -1,8 +1,12 @@
 import { parseHTML } from 'linkedom';
 import type { EnhancedEvent, Event } from '../../shared/types/event';
 import { cache } from '../services/cache';
+import { readEventernote } from './readEventernote';
 
 interface EventDetails {
+  name: string;
+  date: string;
+  place: string;
   artists: string[];
   description?: string;
   imageUrl?: string;
@@ -15,7 +19,7 @@ export async function scrapeEventDetails(
 
   try {
     // Check memory cache first
-    const cacheKey = `event:${eventHref}`;
+    const cacheKey = `event-details:${eventHref}`;
     const cached = cache.get<EventDetails>(cacheKey);
 
     if (cached) {
@@ -24,17 +28,20 @@ export async function scrapeEventDetails(
     }
 
     // Scrape event page
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const html = await response.text();
+    const html = await readEventernote(url, 1);
     const { document } = parseHTML(html);
+
+    const name = document.querySelector('div.span8.page h2')?.textContent?.trim();
+    const rows = Array.from(document.querySelectorAll('table.table tr'));
+    const date = rows.find(row => row.querySelector('td')?.textContent?.trim() === '開催日時')
+      ?.querySelectorAll('td')[1]?.textContent?.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    const place = rows.find(row => row.querySelector('td')?.textContent?.trim() === '開催場所')
+      ?.querySelectorAll('td')[1]?.textContent?.trim();
+    if (!name || !date || place === undefined) throw new Error(`Incomplete event details: ${eventHref}`);
 
     // Extract artist names using EXACT selector from reference project
     const artistElements = document.querySelectorAll(
-      'div.event > div.actor > ul > li > a'
+      'table ul.actors > li > a'
     );
 
     const artists = Array.from(artistElements)
@@ -57,6 +64,9 @@ export async function scrapeEventDetails(
     const imageUrl = imageEl?.getAttribute('src') || imageEl?.getAttribute('data-src');
 
     const result: EventDetails = {
+      name,
+      date,
+      place,
       artists: uniqueArtists,
       description,
       imageUrl: imageUrl || undefined
@@ -71,12 +81,7 @@ export async function scrapeEventDetails(
 
   } catch (error) {
     console.error(`❌ Error scraping event ${eventHref}:`, error);
-    // Return empty artists array instead of throwing
-    return {
-      artists: [],
-      description: undefined,
-      imageUrl: undefined
-    };
+    throw error;
   }
 }
 

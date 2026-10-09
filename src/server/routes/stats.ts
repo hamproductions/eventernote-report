@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { cache } from '../services/cache';
 import { calculateArtistStats, calculateVenueStats, filterEventsByDateRange } from '../utils/calculations';
 import type { EnhancedEvent } from '../../shared/types/event';
+import { attendanceCacheKey } from '../crawlers/attendedEvents';
 
 export const statsRoutes = new Elysia({ prefix: '/stats' })
   .get(
@@ -14,10 +15,10 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         console.log(`📊 Calculating artist stats for user: ${userId}`);
 
         // Fetch events from memory cache
-        const cacheKey = `events:${userId}:${startDate || 'all'}:${endDate || 'all'}`;
-        const cached = cache.get<{ events: any[] }>(cacheKey);
+        const cacheKey = attendanceCacheKey(userId, startDate, endDate);
+        const cached = cache.get<EnhancedEvent[]>(cacheKey);
 
-        if (!cached || !cached.events) {
+        if (!cached) {
           return {
             success: false,
             error: {
@@ -28,8 +29,8 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         }
 
         // Convert to EnhancedEvent format
-        const events: EnhancedEvent[] = cached.events.map((e: any) => {
-          const parsedDate = new Date(e.date);
+        const events: EnhancedEvent[] = cached.map((e: any) => {
+          const parsedDate = new Date(`${e.date.slice(0, 10)}T00:00:00`);
           return {
             ...e,
             parsedDate,
@@ -40,7 +41,7 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         });
 
         // Calculate stats
-        const stats = calculateArtistStats(events);
+        const stats = calculateArtistStats(filterEventsByDateRange(events, startDate, endDate));
         const limited = stats.slice(0, parseInt(limit || '1000'));
 
         console.log(`✅ Calculated stats for ${stats.length} artists`);
@@ -92,10 +93,10 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         console.log(`📊 Calculating venue stats for user: ${userId}`);
 
         // Fetch events from memory cache
-        const cacheKey = `events:${userId}:${startDate || 'all'}:${endDate || 'all'}`;
-        const cached = cache.get<{ events: any[] }>(cacheKey);
+        const cacheKey = attendanceCacheKey(userId, startDate, endDate);
+        const cached = cache.get<EnhancedEvent[]>(cacheKey);
 
-        if (!cached || !cached.events) {
+        if (!cached) {
           return {
             success: false,
             error: {
@@ -106,8 +107,8 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         }
 
         // Convert to EnhancedEvent format
-        const events: EnhancedEvent[] = cached.events.map((e: any) => {
-          const parsedDate = new Date(e.date);
+        const events: EnhancedEvent[] = cached.map((e: any) => {
+          const parsedDate = new Date(`${e.date.slice(0, 10)}T00:00:00`);
           return {
             ...e,
             parsedDate,
@@ -118,7 +119,7 @@ export const statsRoutes = new Elysia({ prefix: '/stats' })
         });
 
         // Calculate stats
-        const stats = calculateVenueStats(events);
+        const stats = calculateVenueStats(filterEventsByDateRange(events, startDate, endDate));
         const limited = stats.slice(0, parseInt(limit || '1000'));
 
         console.log(`✅ Calculated stats for ${stats.length} venues`);

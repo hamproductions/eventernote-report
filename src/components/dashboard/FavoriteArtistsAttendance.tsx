@@ -18,8 +18,9 @@ interface FavoriteArtistsAttendanceProps {
 export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendanceProps) {
   if (!artists.length) return null;
 
-  const totalAttended = artists.reduce((s, a) => s + a.attended, 0);
-  const totalEvents = artists.reduce((s, a) => s + a.total, 0);
+  const topArtists = [...artists].sort((a, b) => b.attended - a.attended).slice(0, 10);
+  const totalAttended = topArtists.reduce((s, a) => s + a.attended, 0);
+  const totalEvents = topArtists.reduce((s, a) => s + a.total, 0);
   const totalMissed = totalEvents - totalAttended;
   const overallPct = totalEvents > 0 ? Math.round((totalAttended / totalEvents) * 1000) / 10 : 0;
 
@@ -30,7 +31,7 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
           <Box>
             <Card.Title>Favorite Artists Attendance</Card.Title>
             <Card.Description>
-              Your attendance rate for each favorite artist in this period
+              Your attendance rate for your top 10 favorite artists in this period
             </Card.Description>
           </Box>
           <VStack gap="0" alignItems="flex-end">
@@ -38,7 +39,7 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
               {overallPct}%
             </Text>
             <Text size="xs" color="fg.muted">
-              {totalAttended}/{totalEvents} events
+              {totalAttended}/{totalEvents} artist appearances
             </Text>
           </VStack>
         </HStack>
@@ -73,8 +74,7 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
             </HStack>
           </HStack>
 
-          {artists
-            .sort((a, b) => b.attended - a.attended)
+          {topArtists
             .map((artist) => (
             <Box
               key={artist.name}

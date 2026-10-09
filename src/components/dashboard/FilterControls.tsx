@@ -4,6 +4,7 @@ import { css } from "styled-system/css";
 import * as Card from "~/components/ui/styled/card";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
+import { formatDate } from "~/shared/utils/dateUtils";
 
 interface FavoriteArtist {
   name: string;
@@ -123,9 +124,9 @@ export function FilterControls({
                   </Text>
                   <input
                     type="date"
-                    value={dateRange.startDate?.toISOString().split("T")[0] || ""}
+                    value={dateRange.startDate ? formatDate(dateRange.startDate) : ""}
                     onChange={(e) => {
-                      const newDate = e.target.value ? new Date(e.target.value) : null;
+                      const newDate = e.target.value ? new Date(`${e.target.value}T00:00:00`) : null;
                       onDateRangeChange({
                         ...dateRange,
                         startDate: newDate
@@ -156,9 +157,9 @@ export function FilterControls({
                   </Text>
                   <input
                     type="date"
-                    value={dateRange.endDate?.toISOString().split("T")[0] || ""}
+                    value={dateRange.endDate ? formatDate(dateRange.endDate) : ""}
                     onChange={(e) => {
-                      const newDate = e.target.value ? new Date(e.target.value) : null;
+                      const newDate = e.target.value ? new Date(`${e.target.value}T00:00:00`) : null;
                       onDateRangeChange({
                         ...dateRange,
                         endDate: newDate
@@ -230,7 +231,8 @@ export function FilterControls({
               </Text>
             )}
 
-            {(!favoriteArtists || favoriteArtists.length === 0) && (
+            {!favoriteArtists && <Text size="xs" color="fg.muted">Loading favorite artists...</Text>}
+            {favoriteArtists && favoriteArtists.length === 0 && (
               <Text size="xs" color="fg.muted">
                 No favorite artists found in your Eventernote profile
               </Text>

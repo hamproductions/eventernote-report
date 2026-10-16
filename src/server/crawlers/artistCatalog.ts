@@ -60,7 +60,7 @@ export async function fetchArtistCatalog(href: string, startDate?: string, endDa
   let request = pending.get(key);
   if (!request) {
     request = crawlCatalog(href, startDate, endDate).then(result => {
-      cache.set(key, result, 5 * 60);
+      cache.set(key, result, 6 * 60 * 60);
       return result;
     });
     pending.set(key, request);

@@ -36,6 +36,7 @@
     "drizzle-orm": "^0.44.6",
     "elysia": "^1.4.11",
     "elysia-connect-middleware": "^0.0.6",
+    "escpos-web-print": "^0.1.0",
     "linkedom": "^0.18.12",
     "lucide-react": "^0.462.0",
     "modern-screenshot": "^4.6.6",
@@ -43,6 +44,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^2.15.0",
+    "uqr": "0.1.2",
     "vike": "^0.4.242",
     "vike-react": "^0.6.9",
     "zustand": "^5.0.2"

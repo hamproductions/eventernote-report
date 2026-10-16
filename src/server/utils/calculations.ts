@@ -135,7 +135,9 @@ export function calculateActivityStats(events: EnhancedEvent[]): ActivityStats {
         weekendsWithEvents: 0,
         weekendPercentage: 0,
         weekendEventCount: 0,
-        weekendEventPercentage: 0
+        weekendEventPercentage: 0,
+        weekdayEventCount: 0,
+        weekdayEventPercentage: 0
       },
       multiEventDayStats: {
         daysWithMultipleEvents: 0,

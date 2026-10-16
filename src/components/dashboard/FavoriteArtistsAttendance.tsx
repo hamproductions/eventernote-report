@@ -2,6 +2,7 @@ import { VStack, HStack, Box } from "styled-system/jsx";
 import { css } from "styled-system/css";
 import * as Card from "~/components/ui/styled/card";
 import { Text } from "~/components/ui/text";
+import { InfoTip } from "./InfoTip";
 
 interface ArtistAttendanceData {
   name: string;
@@ -35,11 +36,12 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
             </Card.Description>
           </Box>
           <VStack gap="0" alignItems="flex-end">
-            <Text size="2xl" fontWeight="bold" color="colorPalette.default">
+            <Text size="2xl" fontWeight="bold" color="colorPalette.text">
               {overallPct}%
             </Text>
-            <Text size="xs" color="fg.muted">
+            <Text size="xs" color="fg.muted" display="inline-flex" alignItems="center">
               {totalAttended}/{totalEvents} artist appearances
+              <InfoTip label="Overall rate">Sum of Went ÷ sum of Total across these artists. An event with two favorites counts once for each.</InfoTip>
             </Text>
           </VStack>
         </HStack>
@@ -59,17 +61,21 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
               Artist
             </Text>
             <HStack gap="6" justifyContent="flex-end">
-              <Text size="xs" fontWeight="semibold" color="fg.muted" w="50px" textAlign="right">
+              <Text size="xs" fontWeight="semibold" color="fg.muted" w="68px" textAlign="right" display="inline-flex" alignItems="center" justifyContent="flex-end">
                 Went
+                <InfoTip label="Went">Events with this artist that you attended in this range.</InfoTip>
               </Text>
-              <Text size="xs" fontWeight="semibold" color="fg.muted" w="50px" textAlign="right">
+              <Text size="xs" fontWeight="semibold" color="fg.muted" w="68px" textAlign="right" display="inline-flex" alignItems="center" justifyContent="flex-end">
                 Missed
+                <InfoTip label="Missed">Their events in this range that you did not attend.</InfoTip>
               </Text>
-              <Text size="xs" fontWeight="semibold" color="fg.muted" w="50px" textAlign="right">
+              <Text size="xs" fontWeight="semibold" color="fg.muted" w="68px" textAlign="right" display="inline-flex" alignItems="center" justifyContent="flex-end">
                 Total
+                <InfoTip label="Total">All of this artist's events on Eventernote in this range, up to today.</InfoTip>
               </Text>
-              <Text size="xs" fontWeight="semibold" color="fg.muted" w="50px" textAlign="right">
+              <Text size="xs" fontWeight="semibold" color="fg.muted" w="68px" textAlign="right" display="inline-flex" alignItems="center" justifyContent="flex-end">
                 Rate
+                <InfoTip label="Rate">Went ÷ Total.</InfoTip>
               </Text>
             </HStack>
           </HStack>
@@ -91,16 +97,16 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
                   {artist.name}
                 </Text>
                 <HStack gap="6" justifyContent="flex-end">
-                  <Text size="sm" fontWeight="bold" color="colorPalette.default" w="50px" textAlign="right">
+                  <Text size="sm" fontWeight="bold" color="colorPalette.text" w="68px" textAlign="right">
                     {artist.attended}
                   </Text>
-                  <Text size="sm" fontWeight="medium" color={artist.missed > 0 ? "fg.muted" : "fg.subtle"} w="50px" textAlign="right">
+                  <Text size="sm" fontWeight="medium" color={artist.missed > 0 ? "fg.muted" : "fg.subtle"} w="68px" textAlign="right">
                     {artist.missed}
                   </Text>
-                  <Text size="sm" color="fg.muted" w="50px" textAlign="right">
+                  <Text size="sm" color="fg.muted" w="68px" textAlign="right">
                     {artist.total}
                   </Text>
-                  <Text size="sm" fontWeight="bold" color="fg.default" w="50px" textAlign="right">
+                  <Text size="sm" fontWeight="bold" color="fg.default" w="68px" textAlign="right">
                     {artist.pct}%
                   </Text>
                 </HStack>
@@ -112,13 +118,13 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
                   <Text size="sm" fontWeight="medium" color="fg.default">
                     {artist.name}
                   </Text>
-                  <Text size="sm" fontWeight="bold" color="colorPalette.default">
+                  <Text size="sm" fontWeight="bold" color="colorPalette.text">
                     {artist.pct}%
                   </Text>
                 </HStack>
                 <HStack gap="4">
                   <Text size="xs" color="fg.muted">
-                    <Text as="span" fontWeight="bold" color="colorPalette.default">{artist.attended}</Text> went
+                    <Text as="span" fontWeight="bold" color="colorPalette.text">{artist.attended}</Text> went
                   </Text>
                   <Text size="xs" color="fg.muted">
                     <Text as="span" fontWeight="bold">{artist.missed}</Text> missed
@@ -162,16 +168,16 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
               Total
             </Text>
             <HStack gap="6" justifyContent="flex-end">
-              <Text size="sm" fontWeight="bold" color="colorPalette.default" w="50px" textAlign="right">
+              <Text size="sm" fontWeight="bold" color="colorPalette.text" w="68px" textAlign="right">
                 {totalAttended}
               </Text>
-              <Text size="sm" fontWeight="bold" color="fg.muted" w="50px" textAlign="right">
+              <Text size="sm" fontWeight="bold" color="fg.muted" w="68px" textAlign="right">
                 {totalMissed}
               </Text>
-              <Text size="sm" fontWeight="bold" color="fg.default" w="50px" textAlign="right">
+              <Text size="sm" fontWeight="bold" color="fg.default" w="68px" textAlign="right">
                 {totalEvents}
               </Text>
-              <Text size="sm" fontWeight="bold" color="fg.default" w="50px" textAlign="right">
+              <Text size="sm" fontWeight="bold" color="fg.default" w="68px" textAlign="right">
                 {overallPct}%
               </Text>
             </HStack>
@@ -190,7 +196,7 @@ export function FavoriteArtistsAttendance({ artists }: FavoriteArtistsAttendance
             <Text size="sm" fontWeight="bold" color="fg.default">Total</Text>
             <HStack gap="4">
               <Text size="xs" color="fg.muted">
-                <Text as="span" fontWeight="bold" color="colorPalette.default">{totalAttended}</Text> went
+                <Text as="span" fontWeight="bold" color="colorPalette.text">{totalAttended}</Text> went
               </Text>
               <Text size="xs" color="fg.muted">
                 <Text as="span" fontWeight="bold">{totalMissed}</Text> missed

@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { parseHTML } from 'linkedom';
 import { fetchRegisteredEvents } from '../crawlers/attendedEvents';
 import { fetchArtistCatalog } from '../crawlers/artistCatalog';
+import { readEventernote } from '../crawlers/readEventernote';
 
 function artistPath(value: string): string {
   const url = new URL(value, 'https://www.eventernote.com');
@@ -13,9 +14,7 @@ function artistPath(value: string): string {
 }
 
 async function readPage(path: string) {
-  const response = await fetch(`https://www.eventernote.com${path}`);
-  if (!response.ok) throw new Error(`Eventernote returned HTTP ${response.status}`);
-  return parseHTML(await response.text()).document;
+  return parseHTML(await readEventernote(`https://www.eventernote.com${path}`, 2)).document;
 }
 
 export const artistRoutes = new Elysia({ prefix: '/artists' })

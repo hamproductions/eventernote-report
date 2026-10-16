@@ -15,7 +15,7 @@ interface EventHeatmapProps {
 export function EventHeatmap({ dateEventMap }: EventHeatmapProps) {
   const heatmapRef = useRef<HTMLDivElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
-  const calInstance = useRef<CalHeatmap>(new CalHeatmap());
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { colorMode } = useColorMode();
 
   useEffect(() => {
@@ -48,11 +48,16 @@ export function EventHeatmap({ dateEventMap }: EventHeatmapProps) {
       (maxDate.getMonth() - minDate.getMonth()) +
       1;
 
-    calInstance.current.paint(
+    const heatmapTarget = document.createElement("div");
+    const legendTarget = document.createElement("div");
+    heatmapRef.current.replaceChildren(heatmapTarget);
+    legendRef.current?.replaceChildren(legendTarget);
+    const calendar = new CalHeatmap();
+    calendar.paint(
       {
         theme: colorMode,
         range: Math.max(1, monthsDiff),
-        itemSelector: heatmapRef.current,
+        itemSelector: heatmapTarget,
         data: {
           source: heatmapData,
           x: "date",
@@ -62,7 +67,9 @@ export function EventHeatmap({ dateEventMap }: EventHeatmapProps) {
         scale: {
           color: {
             type: "threshold",
-            range: ["#14432a", "#166b34", "#37a446", "#4dd05a"],
+            range: colorMode === "dark"
+              ? ["#104d87", "#2870bd", "#3b9eff", "#70b8ff"]
+              : ["#acd8fc", "#5eb1ef", "#0588f0", "#0d74ce"],
             domain: [threshold1, threshold2, threshold3]
           }
         },
@@ -95,8 +102,8 @@ export function EventHeatmap({ dateEventMap }: EventHeatmapProps) {
         [
           LegendLite,
           {
-            includeBlank: true,
-            itemSelector: legendRef.current,
+            includeBlank: false,
+            itemSelector: legendTarget,
             radius: 2,
             width: 11,
             height: 11,
@@ -118,34 +125,41 @@ export function EventHeatmap({ dateEventMap }: EventHeatmapProps) {
       ]
     );
 
+    const scrollToLatest = window.setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }, 300);
+
     return () => {
-      calInstance.current.destroy();
+      window.clearTimeout(scrollToLatest);
+      calendar.destroy();
+      heatmapTarget.remove();
+      legendTarget.remove();
     };
   }, [dateEventMap, colorMode]);
 
   return (
     <Card.Root>
       <Card.Header>
-        <Card.Title>Activity Heatmap</Card.Title>
+        <Card.Title>Days you went out</Card.Title>
         <Card.Description>
-          Visual overview of your event attendance patterns
+          One square per day. Stronger blue means more events that day.
         </Card.Description>
       </Card.Header>
       <Card.Body>
-        <Box w="full" overflowX="auto">
+        <Box ref={scrollRef} w="full" overflowX="auto" scrollbarWidth="thin">
           <div ref={heatmapRef} />
-          <HStack
-            gap="1"
-            justifyContent="flex-end"
-            mt="2"
-            fontSize="xs"
-            color="fg.muted"
-          >
-            <Box>Less</Box>
-            <div ref={legendRef} />
-            <Box>More</Box>
-          </HStack>
         </Box>
+        <HStack
+          gap="1"
+          justifyContent="flex-end"
+          mt="2"
+          fontSize="xs"
+          color="fg.muted"
+        >
+          <Box>Less</Box>
+          <div ref={legendRef} />
+          <Box>More</Box>
+        </HStack>
       </Card.Body>
     </Card.Root>
   );

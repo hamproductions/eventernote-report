@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReport } from '../../contexts/ReportContext';
 import { useColorMode } from '../../contexts/ColorModeContext';
 import { calculateComprehensiveAnalytics, calculateChartAnalytics } from '../../server/utils/calculations';
-import { Box, VStack, Grid } from 'styled-system/jsx';
+import { Box, VStack, HStack, Grid } from 'styled-system/jsx';
 import { css } from 'styled-system/css';
 import { token } from 'styled-system/tokens';
 import { Button } from '~/components/ui/button';
@@ -22,14 +22,21 @@ import {
   FavoriteArtistsAttendance,
   ArtistAttendanceGrowth,
   MonthlyBreakdown,
-  ExportPreview,
   RadarChart,
   Highlights
 } from '~/components/dashboard';
 import type { EnhancedEvent } from '~/shared/types/event';
-import { formatDate } from '~/shared/utils/dateUtils';
+import { formatDate, formatDisplayDate } from '~/shared/utils/dateUtils';
+import { fetchJson } from '~/shared/utils/fetchJson';
+import { parseUserInput } from '~/shared/utils/parseUserInput';
 import { ManualArtistAttendance } from '~/components/dashboard/ManualArtistAttendance';
 import { LoadingStatus } from '~/components/dashboard/LoadingStatus';
+import { ReportSection } from '~/components/dashboard/ReportSection';
+import { ReceiptPanel } from '~/components/receipt/ReceiptPanel';
+import { PeopleDrawer, type PeopleTab } from '~/components/dashboard/PeopleDrawer';
+import { CompareDrawer } from '~/components/dashboard/CompareDrawer';
+import { ShareImageDrawer } from '~/components/share/ShareImageDrawer';
+import type { PosterData } from '~/components/share/SharePoster';
 
 interface EventsResponse {
   success: boolean;
@@ -72,16 +79,20 @@ interface UserProfileResponse {
 }
 
 export default function Page() {
-  const { userId, setUserId, dateRange, setDateRange } = useReport();
+  const { userId, setUserId, dateRange, setDateRange, recentUsers, rememberUser, forgetUser } = useReport();
   const { colorMode, setColorMode } = useColorMode();
   const [inputValue, setInputValue] = useState(userId || '');
   const [artistsViewLimit, setArtistsViewLimit] = useState<number>(10);
   const [venuesViewLimit, setVenuesViewLimit] = useState<number>(10);
-  const [eventsViewLimit, setEventsViewLimit] = useState<number>(20);
   const [filterByFavorites, setFilterByFavorites] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const [peopleTab, setPeopleTab] = useState<PeopleTab | null>(null);
   const eventsListRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
-  const exportRef = useRef<HTMLDivElement>(null);
   const dateChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Debounced date range setter to prevent race conditions
@@ -114,6 +125,7 @@ export default function Page() {
     isLoading,
     isError,
     error,
+    refetch: refetchEvents,
     isFetching
   } = useQuery<EventsResponse>({
     queryKey: ['events', userId, dateRangeKey],
@@ -126,25 +138,19 @@ export default function Page() {
         params.set('endDate', formatDate(dateRange.endDate));
       }
 
-      const res = await fetch(`/api/events/user/${userId}?${params}`);
-      if (!res.ok) throw new Error('Failed to fetch events');
-      const result = await res.json();
-      if (!result.success) throw new Error(result.error?.message || 'Failed to fetch events');
-      return result;
+      return fetchJson<EventsResponse>(`/api/events/user/${encodeURIComponent(userId!)}?${params}`, 'Could not load events');
     },
     enabled: !!userId,
     retry: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 10, // 10 minutes
-    placeholderData: (previousData) => previousData // Keep previous data while fetching
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    placeholderData: (previousData, previousQuery) => (previousQuery?.queryKey[1] === userId ? previousData : undefined)
   });
 
-  const { data: favoriteArtistsData } = useQuery<FavoriteArtistsResponse>({
+  const { data: favoriteArtistsData, isError: favoritesFailed } = useQuery<FavoriteArtistsResponse>({
     queryKey: ['favoriteArtists', userId],
     queryFn: async () => {
-      const res = await fetch(`/api/favorite-artists/user/${userId}`);
-      if (!res.ok) throw new Error('Failed to fetch favorite artists');
-      return res.json();
+      return fetchJson<FavoriteArtistsResponse>(`/api/favorite-artists/user/${encodeURIComponent(userId!)}`, 'Could not load favorite artists');
     },
     enabled: !!userId
   });
@@ -160,28 +166,26 @@ export default function Page() {
       return response.json();
     },
     enabled: !!userId && isFetching,
-    refetchInterval: isFetching ? 1000 : false,
+    refetchInterval: isFetching ? 1500 : false,
     retry: false
   });
-  const loadingMessage = loadingProgress?.stage === 'details'
-    ? `Verifying event details: ${loadingProgress.loaded} / ${loadingProgress.total}`
-    : 'Loading Eventernote lists for the selected date range...';
 
-  const { data: userProfileData, isLoading: isProfileLoading, error: profileError } = useQuery<UserProfileResponse>({
+  const { data: userProfileData, isLoading: isProfileLoading, error: profileError, refetch: refetchProfile, isFetching: isProfileFetching } = useQuery<UserProfileResponse>({
     queryKey: ['userProfile', userId, dateRangeKey],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (dateRangeKey.start) params.set('startDate', dateRangeKey.start);
       if (dateRangeKey.end) params.set('endDate', dateRangeKey.end);
-      const res = await fetch(`/api/user-profile/${userId}?${params}`);
-      if (!res.ok) throw new Error('Failed to fetch user profile');
-      const result = await res.json();
-      if (!result.success) throw new Error(result.error || 'Failed to fetch user profile');
-      return result;
+      return fetchJson<UserProfileResponse>(`/api/user-profile/${encodeURIComponent(userId!)}?${params}`, 'Could not load favorite attendance');
     },
     enabled: !!userId,
-    staleTime: 1000 * 60 * 10
+    staleTime: 1000 * 60 * 30
   });
+
+  const profileName = userProfileData?.data?.displayName || userProfileData?.data?.username;
+  useEffect(() => {
+    if (userId && eventsData?.success) rememberUser({ id: userId, name: profileName || userId });
+  }, [userId, eventsData, profileName]);
 
   // Filter events by date range only (for statistics)
   const filteredEvents = useMemo(() => {
@@ -218,19 +222,17 @@ export default function Page() {
       return filteredEvents;
     }
 
-    return filteredEvents.filter(event => {
-      const hasFavoriteArtist = event.artists?.some(artist =>
-        favoriteArtistNames.includes(artist)
-      );
-      return hasFavoriteArtist;
-    });
+    const favoriteSet = new Set(favoriteArtistNames);
+    return filteredEvents
+      .filter(event => event.artists?.some(artist => favoriteSet.has(artist)))
+      .map(event => ({ ...event, artists: event.artists.filter(artist => favoriteSet.has(artist)) }));
   }, [filteredEvents, filterByFavorites, favoriteArtistsData]);
 
   // Calculate analytics for stats cards (using all date-filtered events)
   const analytics = useMemo(() => {
-    if (!filteredEvents.length) return null;
+    if (!chartFilteredEvents.length) return null;
 
-    const comprehensiveAnalytics = calculateComprehensiveAnalytics(filteredEvents);
+    const comprehensiveAnalytics = calculateComprehensiveAnalytics(chartFilteredEvents);
 
     // Calculate events without favorites
     const favoriteArtistNames = favoriteArtistsData?.data?.map(a => a.name) || [];
@@ -255,6 +257,7 @@ export default function Page() {
       dateRange: comprehensiveAnalytics.basic.dateRange,
       eventsWithoutFavorites,
       eventsWithoutFavoritesPercentage,
+      allEventsCount: filteredEvents.length,
       avgEventsPerMonth: comprehensiveAnalytics.temporal.avgEventsPerMonth,
       topDayOfWeek: comprehensiveAnalytics.temporal.topDayOfWeek,
       busiestMonth: comprehensiveAnalytics.temporal.busiestMonth,
@@ -294,7 +297,7 @@ export default function Page() {
       artistMap: comprehensiveAnalytics.artistMap,
       venueMap: comprehensiveAnalytics.venueMap
     };
-  }, [filteredEvents, favoriteArtistsData]);
+  }, [filteredEvents, chartFilteredEvents, favoriteArtistsData]);
 
   // Calculate analytics for charts (using favorite artists filter)
   const chartAnalytics = useMemo(() => {
@@ -371,7 +374,7 @@ export default function Page() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setUserId(inputValue);
+    setUserId(parseUserInput(inputValue));
   };
 
   const cycleArtistsView = (total: number) => {
@@ -388,13 +391,6 @@ export default function Page() {
     else setVenuesViewLimit(10);
   };
 
-  const cycleEventsView = (total: number) => {
-    if (eventsViewLimit === 20) setEventsViewLimit(50);
-    else if (eventsViewLimit === 50) setEventsViewLimit(100);
-    else if (eventsViewLimit === 100) setEventsViewLimit(total);
-    else setEventsViewLimit(20);
-  };
-
   const getArtistsViewLabel = (total: number) => {
     if (artistsViewLimit === 10) return 'Show Top 50';
     if (artistsViewLimit === 50) return 'Show Top 100';
@@ -407,29 +403,6 @@ export default function Page() {
     if (venuesViewLimit === 50) return 'Show Top 100';
     if (venuesViewLimit === 100) return `Show All (${total})`;
     return 'Show Top 10';
-  };
-
-  const getEventsViewLabel = (total: number) => {
-    if (eventsViewLimit === 20) return 'Show Top 50';
-    if (eventsViewLimit === 50) return 'Show Top 100';
-    if (eventsViewLimit === 100) return `Show All (${total})`;
-    return 'Show Recent 20';
-  };
-
-  const copyEventsToClipboard = () => {
-    if (!chartFilteredEvents.length) return;
-
-    const eventsList = [...chartFilteredEvents]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, eventsViewLimit)
-      .map(event => {
-        const date = event.date.split(' ')[0]; // Just the date part
-        const monthDay = date.substring(5); // Remove year (YYYY-MM-DD -> MM-DD)
-        return `${monthDay} - ${event.name}`;
-      })
-      .join('\n');
-
-    navigator.clipboard.writeText(eventsList);
   };
 
   const exportEventsListAsPNG = async () => {
@@ -447,24 +420,6 @@ export default function Page() {
       link.click();
     } catch (error) {
       console.error('Failed to export PNG:', error);
-    }
-  };
-
-  const exportStatsAsPNG = async () => {
-    if (!exportRef.current) return;
-
-    try {
-      const dataUrl = await domToPng(exportRef.current, {
-        scale: 2,
-        backgroundColor: token.var('colors.bg.default')
-      });
-
-      const link = document.createElement('a');
-      link.download = `stats-${userId}-${new Date().toISOString().split('T')[0]}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (error) {
-      console.error('Failed to export stats PNG:', error);
     }
   };
 
@@ -519,12 +474,66 @@ export default function Page() {
         };
         break;
       default:
-        return;
+        if (!preset.startsWith('year-')) return;
+        newRange = {
+          startDate: new Date(Number(preset.slice(5)), 0, 1),
+          endDate: new Date(Number(preset.slice(5)), 11, 31)
+        };
     }
 
     debouncedSetDateRange(newRange);
     setActivePreset(preset);
   }, [debouncedSetDateRange]);
+
+  const posterData = useMemo<PosterData | null>(() => {
+    if (!analytics || !chartAnalytics) return null;
+    const eventDates = chartFilteredEvents.map(event => event.date.slice(0, 10)).sort();
+    const today = formatDate(new Date());
+    const best = [...favoriteAttendanceData].sort((a, b) => b.pct - a.pct)[0];
+    const rangeStart = dateRange.startDate ? formatDate(dateRange.startDate) : eventDates[0] ?? today;
+    const rangeEnd = dateRange.endDate ? [formatDate(dateRange.endDate), today].sort()[0] : today;
+    const weekendKey = (time: number) => {
+      const date = new Date(time);
+      if (date.getDay() === 0) date.setDate(date.getDate() - 1);
+      return formatDate(date);
+    };
+    const allWeekends = new Set<string>();
+    for (let time = new Date(`${rangeStart}T00:00:00`).getTime(); time <= new Date(`${rangeEnd}T00:00:00`).getTime(); time += 86400000) {
+      const day = new Date(time).getDay();
+      if (day === 0 || day === 6) allWeekends.add(weekendKey(time));
+    }
+    const weekendsOut = new Set(eventDates.filter(date => [0, 6].includes(new Date(`${date}T00:00:00`).getDay())).map(date => weekendKey(new Date(`${date}T00:00:00`).getTime())));
+    const totalDays = Math.round((new Date(`${rangeEnd}T00:00:00`).getTime() - new Date(`${rangeStart}T00:00:00`).getTime()) / 86400000) + 1;
+    return {
+      name: profileName || recentUsers.find(user => user.id === userId)?.name || userId || '',
+      userId: userId || '',
+      period: dateRange.startDate ? `${formatDisplayDate(dateRange.startDate)} to ${dateRange.endDate ? formatDisplayDate(dateRange.endDate) : 'today'}` : 'All time',
+      rangeStart,
+      rangeEnd,
+      favoritesOnly: filterByFavorites,
+      eventDates,
+      totalEvents: analytics.totalEvents,
+      daysOut: analytics.uniqueDays,
+      totalDays,
+      venues: analytics.uniqueVenues,
+      artists: analytics.uniqueArtists,
+      weekendShare: analytics.weekendStats.weekendEventPercentage,
+      weekendsOut: [weekendsOut.size, allWeekends.size],
+      multiEventDays: analytics.multiEventDayStats.daysWithMultipleEvents,
+      maxDay: { count: analytics.multiEventDayStats.maxEventsInDay, date: analytics.multiEventDayStats.maxEventsInDayDate },
+      streak: {
+        days: analytics.streaks.daily.longestStreak,
+        start: analytics.streaks.daily.longestStreakStartDate,
+        end: analytics.streaks.daily.longestStreakEndDate
+      },
+      weeklyStreak: analytics.streaks.weekly.longestStreak,
+      busiestMonth: analytics.busiestMonth ?? null,
+      topArtists: analytics.topArtists.slice(0, 8),
+      topVenues: analytics.topVenues.slice(0, 3).map(([name, events]) => [name, events.length] as [string, number]),
+      favoriteBest: best && best.total >= 3 ? { name: best.name, pct: best.pct } : null,
+      url: `${window.location.origin}/?user=${encodeURIComponent(userId || '')}`
+    };
+  }, [analytics, chartAnalytics, chartFilteredEvents, favoriteAttendanceData, profileName, recentUsers, userId, dateRange, filterByFavorites]);
 
   if (!userId) {
     return (
@@ -536,42 +545,55 @@ export default function Page() {
               Eventernote Reports
             </Heading>
             <Text size="md" color="fg.muted" maxW="400px">
-              Analyze your concert history, discover patterns, and visualize your live music journey
+              Your concert history as charts, streaks and a printable receipt
             </Text>
           </VStack>
 
           {/* Card with Form */}
           <Card.Root>
             <Card.Header>
-              <Card.Title>Get Started</Card.Title>
-              <Card.Description>
-                Enter your Eventernote User ID to generate your personalized report
-              </Card.Description>
+              <Card.Title>Open your report</Card.Title>
             </Card.Header>
             <Card.Body>
+              {recentUsers.length > 0 && (
+                <VStack gap="2" alignItems="stretch" mb="6">
+                  <Text size="sm" fontWeight="medium">Recent</Text>
+                  <HStack gap="2" flexWrap="wrap">
+                    {recentUsers.map((user) => (
+                      <Button key={user.id} variant="outline" size="sm" onClick={() => setUserId(user.id)}>
+                        {user.name}{user.name !== user.id ? ` (@${user.id})` : ''}
+                      </Button>
+                    ))}
+                  </HStack>
+                </VStack>
+              )}
               <form onSubmit={handleSubmit} style={{ width: '100%' }}>
                 <VStack gap="6" alignItems="stretch">
                   <VStack gap="3" alignItems="stretch">
-                    <Text size="sm" fontWeight="medium" color="fg.default">
-                      Eventernote User ID
-                    </Text>
+                    <label htmlFor="user-id" className={css({ fontSize: 'sm', fontWeight: 'medium', color: 'fg.default' })}>
+                      Eventernote user ID or profile URL
+                    </label>
                     <input
+                      id="user-id"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       type="text"
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      placeholder="e.g., HamP_punipuni"
+                      placeholder="HamP_punipuni or eventernote.com/users/HamP_punipuni"
                       className={css({
                         w: 'full',
                         p: '3.5',
                         borderRadius: 'md',
                         borderWidth: '1px',
-                        borderColor: 'border.default',
+                        borderColor: 'border.control',
                         bg: 'bg.default',
                         color: 'fg.default',
                         fontSize: 'md',
                         transition: 'all 0.2s',
                         _hover: {
-                          borderColor: 'border.emphasized'
+                          borderColor: 'fg.muted'
                         },
                         _focus: {
                           outline: 'none',
@@ -586,7 +608,7 @@ export default function Page() {
                       })}
                     />
                     <Text size="xs" color="fg.muted">
-                      Find your User ID in your Eventernote profile URL
+                      The ID is the last part of your profile URL: eventernote.com/users/<b>ID</b>
                     </Text>
                   </VStack>
 
@@ -602,7 +624,7 @@ export default function Page() {
                       WebkitTapHighlightColor: 'transparent'
                     })}
                   >
-                    Generate Report
+                    Show my report
                   </Button>
                 </VStack>
               </form>
@@ -611,225 +633,248 @@ export default function Page() {
 
           {/* Footer hint */}
           <Text size="xs" color="fg.subtle" textAlign="center">
-            Your data is fetched in real-time from Eventernote and cached for 5 minutes
+            Not affiliated with Eventernote. Data is read live from public profiles.
           </Text>
         </VStack>
       </Box>
     );
   }
 
+  const resetView = () => {
+    setUserId(null);
+    setActivePreset('thisYear');
+    setFilterByFavorites(false);
+    setArtistsViewLimit(10);
+    setVenuesViewLimit(10);
+  };
+
+  const refreshFromEventernote = async () => {
+    const params = new URLSearchParams({ refresh: '1' });
+    if (dateRangeKey.start) params.set('startDate', dateRangeKey.start);
+    if (dateRangeKey.end) params.set('endDate', dateRangeKey.end);
+    setRefreshing(true);
+    try {
+      const fresh = await fetchJson<EventsResponse>(`/api/events/user/${encodeURIComponent(userId)}?${params}`, 'Could not reload events');
+      queryClient.setQueryData(['events', userId, dateRangeKey], fresh);
+    } catch {
+      await queryClient.invalidateQueries({ queryKey: ['events', userId, dateRangeKey] });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const openUser = (id: string) => {
+    setPeopleTab(null);
+    setFilterByFavorites(false);
+    setArtistsViewLimit(10);
+    setVenuesViewLimit(10);
+    setUserId(id);
+    window.scrollTo({ top: 0 });
+  };
+
   return (
-    <Box bg="bg.default" colorPalette="blue" minH="100vh" p={{ base: '4', md: '8' }}>
-      <VStack gap="8" alignItems="stretch">
-        <DashboardHeader
-          colorMode={colorMode}
-          userProfile={userProfileData?.data}
-          onExportStats={exportStatsAsPNG}
-          onToggleColorMode={() => setColorMode?.(colorMode === 'dark' ? 'light' : 'dark')}
-          onChangeUser={() => {
-            setUserId(null);
-            setActivePreset('thisYear');
-            setFilterByFavorites(false);
-            setArtistsViewLimit(10);
-            setVenuesViewLimit(10);
-            setEventsViewLimit(20);
-          }}
-        />
+    <Box bg="bg.default" colorPalette="blue" minH="100vh" position="relative" overflowX="clip" px={{ base: '4', md: '8' }} pb={{ base: '10', md: '16' }}>
+      <DashboardHeader
+        userId={userId}
+        colorMode={colorMode}
+        userProfile={userProfileData?.data}
+        attendedCount={analytics ? chartFilteredEvents.length : undefined}
+        favoritesOnly={filterByFavorites}
+        showSections={!!analytics}
+        onOpenReceipt={() => setReceiptOpen(true)}
+        onOpenCompare={() => setCompareOpen(true)}
+        onRefresh={refreshFromEventernote}
+        refreshing={refreshing}
+        recentUsers={recentUsers}
+        onSelectUser={openUser}
+        onForgetUser={forgetUser}
+        onOpenPeople={setPeopleTab}
+        onExportStats={() => setShareOpen(true)}
+        onToggleColorMode={() => setColorMode?.(colorMode === 'dark' ? 'light' : 'dark')}
+        onChangeUser={resetView}
+        filters={
+          <FilterControls
+            dateRange={dateRange}
+            activePreset={activePreset}
+            filterByFavorites={filterByFavorites}
+            favoriteArtists={favoriteArtistsData?.data}
+            favoritesFailed={favoritesFailed}
+            onPresetChange={setPresetRange}
+            onDateRangeChange={debouncedSetDateRange}
+            onFilterByFavoritesChange={setFilterByFavorites}
+            onActivePresetChange={setActivePreset}
+          />
+        }
+      />
 
-        <FilterControls
-          dateRange={dateRange}
-          activePreset={activePreset}
-          filterByFavorites={filterByFavorites}
-          favoriteArtists={favoriteArtistsData?.data}
-          onPresetChange={setPresetRange}
-          onDateRangeChange={debouncedSetDateRange}
-          onFilterByFavoritesChange={setFilterByFavorites}
-          onActivePresetChange={setActivePreset}
-        />
+      <VStack as="main" gap={{ base: '10', md: '14' }} alignItems="stretch" maxW="1400px" mx="auto" pt="6">
+        {(isFetching || isProfileLoading || profileError || isError) && (
+          <VStack gap="3" alignItems="stretch">
+            {isFetching && (
+              <LoadingStatus label="Loading your report" detail={loadingProgress?.stage === 'details'
+                ? `${loadingProgress.loaded} of ${loadingProgress.total} events checked`
+                : 'Finding events in this date range'} loaded={loadingProgress?.loaded} total={loadingProgress?.total} />
+            )}
+            {isProfileLoading && (
+              <LoadingStatus label="Loading favorite attendance" detail="Checking artist events for this date range" />
+            )}
+            {isError && !isFetching && (
+              <HStack gap="3" flexWrap="wrap" role="alert">
+                <Text color="fg.error">{error?.message.includes('HTTP 404') ? `No Eventernote user called "${userId}". Check the ID, or pick another user from the name menu above.` : `Events didn't load: ${error?.message}. Try again in a moment.`}</Text>
+                <Button size="sm" variant="outline" onClick={() => refetchEvents()}>Try again</Button>
+              </HStack>
+            )}
+            {profileError && !isProfileFetching && !isError && (
+              <HStack gap="3" flexWrap="wrap" role="alert">
+                <Text color="fg.error">Favorite attendance didn't load: {profileError.message}.</Text>
+                <Button size="sm" variant="outline" onClick={() => refetchProfile()}>Try again</Button>
+              </HStack>
+            )}
+          </VStack>
+        )}
 
-        {isFetching && (
-          <LoadingStatus label="Loading your report" detail={loadingProgress?.stage === 'details'
-            ? `${loadingProgress.loaded} of ${loadingProgress.total} events checked`
-            : 'Finding events in this date range'} loaded={loadingProgress?.loaded} total={loadingProgress?.total} />
-        )}
-        <ManualArtistAttendance key={userId} userId={userId} dateRange={dateRange} />
-        {isProfileLoading && (
-          <LoadingStatus label="Loading favorite attendance" detail="Checking artist events for this date range" />
-        )}
-        {profileError && <Text color="fg.error" role="alert">{profileError.message}</Text>}
-        {isError && <Text color="fg.error" role="alert">{error?.message || 'Error loading events'}</Text>}
-        {!isFetching && !isError && eventsData && !filteredEvents.length && (
+        {!isFetching && !isError && eventsData && !chartFilteredEvents.length && (
           <Card.Root>
             <Card.Body>
               <VStack gap="4" alignItems="center" py="8">
                 <Text size="lg" fontWeight="medium" color="fg.default">
-                  No events found
+                  {filteredEvents.length ? 'No events with favorite artists in this range' : 'No events in this range'}
                 </Text>
                 <Text size="sm" color="fg.muted" textAlign="center">
-                  No attended events were found for this user in the selected date range.
-                  Try a different date range or check the User ID.
+                  {filteredEvents.length
+                    ? `${filteredEvents.length} events are hidden by Favorites only.`
+                    : <>Pick a wider range above, or check that <b>{userId}</b> is the right user.</>}
                 </Text>
-                <Button
-                  variant="outline"
-                  colorPalette="blue"
-                  onClick={() => {
-                    setUserId(null);
-                    setActivePreset('thisYear');
-                  }}
-                >
-                  Try Another User
-                </Button>
+                <HStack gap="3" flexWrap="wrap" justifyContent="center">
+                  {filteredEvents.length > 0 && <Button colorPalette="blue" onClick={() => setFilterByFavorites(false)}>Show all events</Button>}
+                  {!filteredEvents.length && <Button colorPalette="blue" onClick={() => setPresetRange('allTime')}>Show all time</Button>}
+                  <Button variant="outline" colorPalette="gray" onClick={resetView}>Try another user</Button>
+                </HStack>
               </VStack>
             </Card.Body>
           </Card.Root>
         )}
 
         {analytics && (
-          <Box ref={statsRef} position="relative">
-            {/* Loading overlay to prevent stale data display */}
-            {isFetching && !isLoading && (
-              <Box
-                position="absolute"
-                top="0"
-                left="0"
-                right="0"
-                bottom="0"
-                bg="bg.default"
-                opacity="0.7"
-                zIndex="10"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-              >
-                <Text color="fg.muted" fontWeight="medium" role="status">{loadingMessage}</Text>
-              </Box>
-            )}
-            <VStack gap="8" alignItems="stretch">
-              {/* Profile and Overview - Side by Side */}
-              <Grid
-                gridTemplateColumns={{ base: '1fr', md: '2fr 3fr' }}
-                gap="6"
-                alignItems="stretch"
-              >
-                {/* Radar Chart - Eventing Profile */}
-                {chartAnalytics && (
-                  <RadarChart radarStats={chartAnalytics.radarStats} />
-                )}
-
-                {/* Stats Cards - Overview */}
-                <StatsCards analytics={analytics} />
-              </Grid>
-
-              {/* Highlights */}
-              {chartAnalytics && analytics && (
-                <Highlights
-                  totalEvents={analytics.totalEvents}
-                  uniqueVenues={analytics.uniqueVenues}
-                  uniqueArtists={analytics.uniqueArtists}
-                  totalArtistAppearances={analytics.totalArtistAppearances}
-                  avgEventsPerMonth={parseFloat(String(analytics.avgEventsPerMonth))}
-                  topDayOfWeek={analytics.topDayOfWeek ? { day: analytics.topDayOfWeek[0], count: analytics.topDayOfWeek[1] } : { day: "N/A", count: 0 }}
-                  busiestMonth={analytics.busiestMonth ? { month: analytics.busiestMonth[0], count: analytics.busiestMonth[1] } : { month: "N/A", count: 0 }}
-                  longestDailyStreak={analytics.streaks.daily.longestStreak}
-                  longestWeeklyStreak={analytics.streaks.weekly.longestStreak}
-                  maxEventsPerDay={analytics.multiEventDayStats.maxEventsInDay}
-                  maxEventsPerDayDate={analytics.multiEventDayStats.maxEventsInDayDate || undefined}
-                  weekendPercentage={analytics.weekendStats.weekendEventPercentage}
-                  topArtist={analytics.mostAttendedArtist ? { name: analytics.mostAttendedArtist[0], count: analytics.mostAttendedArtist[1] } : undefined}
-                  topVenue={analytics.mostVisitedVenue ? { name: analytics.mostVisitedVenue[0], count: analytics.mostVisitedVenue[1].length } : undefined}
-                  favoriteAttendance={favoriteAttendanceData.length > 0 ? (() => {
-                    const best = [...favoriteAttendanceData].sort((a, b) => b.pct - a.pct)[0];
-                    return best ? { name: best.name, pct: best.pct } : undefined;
-                  })() : undefined}
-                  daysActivePercentage={analytics.daysSpentPercentage}
-                />
-              )}
-
-              {/* Event Heatmap and Monthly Activity - Side by Side */}
-              {chartAnalytics && (
-                <Grid
-                  gridTemplateColumns={{ base: '1fr', lg: '3fr 2fr' }}
-                  gap="6"
-                  alignItems="stretch"
-                >
-                  <EventHeatmap
-                    dateEventMap={chartAnalytics.dateEventMap}
-                  />
-                  <MonthlyBreakdown
-                    monthlyBreakdown={chartAnalytics.monthlyBreakdown}
-                  />
+          <Box ref={statsRef} position="relative" aria-busy={isFetching}>
+            <VStack gap={{ base: '10', md: '14' }} alignItems="stretch" opacity={isFetching && !isLoading ? 0.45 : 1} transition="opacity 0.2s" pointerEvents={isFetching && !isLoading ? 'none' : 'auto'}>
+              <ReportSection id="overview" title="Overview" description="Totals, habits and highlights for the selected range">
+                <Grid gridTemplateColumns={{ base: '1fr', lg: '2fr 3fr' }} gap="6" alignItems="stretch">
+                  {chartAnalytics && <RadarChart radarStats={chartAnalytics.radarStats} />}
+                  <StatsCards analytics={analytics} />
                 </Grid>
-              )}
+                {chartAnalytics && (
+                  <Highlights
+                    totalEvents={analytics.totalEvents}
+                    uniqueVenues={analytics.uniqueVenues}
+                    uniqueArtists={analytics.uniqueArtists}
+                    totalArtistAppearances={analytics.totalArtistAppearances}
+                    avgEventsPerMonth={parseFloat(String(analytics.avgEventsPerMonth))}
+                    topDayOfWeek={analytics.topDayOfWeek ? { day: analytics.topDayOfWeek[0], count: analytics.topDayOfWeek[1] } : { day: "N/A", count: 0 }}
+                    busiestMonth={analytics.busiestMonth ? { month: analytics.busiestMonth[0], count: analytics.busiestMonth[1] } : { month: "N/A", count: 0 }}
+                    longestDailyStreak={analytics.streaks.daily.longestStreak}
+                    longestWeeklyStreak={analytics.streaks.weekly.longestStreak}
+                    maxEventsPerDay={analytics.multiEventDayStats.maxEventsInDay}
+                    maxEventsPerDayDate={analytics.multiEventDayStats.maxEventsInDayDate || undefined}
+                    weekendPercentage={analytics.weekendStats.weekendEventPercentage}
+                    topArtist={analytics.mostAttendedArtist ? { name: analytics.mostAttendedArtist[0], count: analytics.mostAttendedArtist[1] } : undefined}
+                    topVenue={analytics.mostVisitedVenue ? { name: analytics.mostVisitedVenue[0], count: analytics.mostVisitedVenue[1].length } : undefined}
+                    favoriteAttendance={favoriteAttendanceData.length > 0 ? (() => {
+                      const best = [...favoriteAttendanceData].sort((a, b) => b.pct - a.pct)[0];
+                      return best ? { name: best.name, pct: best.pct } : undefined;
+                    })() : undefined}
+                    daysActivePercentage={parseFloat(analytics.daysSpentPercentage)}
+                  />
+                )}
+              </ReportSection>
 
-              {/* Cumulative Attendance - Artist Growth */}
               {chartAnalytics && (
-                <ArtistAttendanceGrowth
-                  cumulativeArtistData={chartAnalytics.cumulativeArtistData}
-                  displayedArtists={chartAnalytics.displayedArtists}
-                />
+                <ReportSection id="activity" title="Activity" description="When you went: by day, by month, and how artist counts grew">
+                  <Grid gridTemplateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap="6" alignItems="start">
+                    <EventHeatmap dateEventMap={chartAnalytics.dateEventMap} />
+                    <MonthlyBreakdown monthlyBreakdown={chartAnalytics.monthlyBreakdown} />
+                  </Grid>
+                  <ArtistAttendanceGrowth
+                    cumulativeArtistData={chartAnalytics.cumulativeArtistData}
+                    displayedArtists={chartAnalytics.displayedArtists}
+                  />
+                </ReportSection>
               )}
 
-              {/* Distribution Charts - Side by Side */}
+              <ReportSection id="artists" title="Artists & venues" description="Who you saw most, where, and how many of a favorite's events you caught">
+                {favoriteAttendanceData.length > 0 && <FavoriteArtistsAttendance artists={favoriteAttendanceData} />}
+                <ManualArtistAttendance key={userId} userId={userId} dateRange={dateRange} />
+                {chartAnalytics && (
+                  <DistributionCharts topVenues={chartAnalytics.topVenues} topArtists={chartAnalytics.topArtists} totalEvents={chartAnalytics.totalEvents} />
+                )}
+                {chartAnalytics && (
+                  <TopArtistsVenues
+                    artistMap={chartAnalytics.artistMap}
+                    venueMap={chartAnalytics.venueMap}
+                    artistsViewLimit={artistsViewLimit}
+                    venuesViewLimit={venuesViewLimit}
+                    uniqueArtists={chartAnalytics.uniqueArtists}
+                    uniqueVenues={chartAnalytics.uniqueVenues}
+                    events={chartFilteredEvents}
+                    artistAttendance={userProfileData?.data?.artistAttendance}
+                    filteredArtistCounts={filteredFavoriteArtistCounts}
+                    filteredArtistTotals={filteredArtistTotals}
+                    onCycleArtistsView={cycleArtistsView}
+                    onCycleVenuesView={cycleVenuesView}
+                    getArtistsViewLabel={getArtistsViewLabel}
+                    getVenuesViewLabel={getVenuesViewLabel}
+                  />
+                )}
+              </ReportSection>
+
               {chartAnalytics && (
-                <DistributionCharts
-                  topVenues={chartAnalytics.topVenues}
-                  topArtists={chartAnalytics.topArtists}
-                />
-              )}
-
-              {/* Favorite Artists Attendance */}
-              {favoriteAttendanceData.length > 0 && (
-                <FavoriteArtistsAttendance artists={favoriteAttendanceData} />
-              )}
-
-              {/* Top Artists & Venues */}
-              {chartAnalytics && (
-                <TopArtistsVenues
-                  artistMap={chartAnalytics.artistMap}
-                  venueMap={chartAnalytics.venueMap}
-                  artistsViewLimit={artistsViewLimit}
-                  venuesViewLimit={venuesViewLimit}
-                  uniqueArtists={chartAnalytics.uniqueArtists}
-                  uniqueVenues={chartAnalytics.uniqueVenues}
-                  events={chartFilteredEvents}
-                  artistAttendance={userProfileData?.data?.artistAttendance}
-                  filteredArtistCounts={filteredFavoriteArtistCounts}
-                  filteredArtistTotals={filteredArtistTotals}
-                  onCycleArtistsView={cycleArtistsView}
-                  onCycleVenuesView={cycleVenuesView}
-                  getArtistsViewLabel={getArtistsViewLabel}
-                  getVenuesViewLabel={getVenuesViewLabel}
-                />
-              )}
-
-              {/* Recent Events */}
-              {chartAnalytics && (
-                <RecentEventsList
-                  events={chartFilteredEvents}
-                  eventsViewLimit={eventsViewLimit}
-                  onExportPNG={exportEventsListAsPNG}
-                  onCopyToClipboard={copyEventsToClipboard}
-                  onCycleView={() => cycleEventsView(chartAnalytics.totalEvents)}
-                  getViewLabel={() => getEventsViewLabel(chartAnalytics.totalEvents)}
-                  eventsListRef={eventsListRef}
-                />
+                <ReportSection id="events" title="Events" description={`Every event you attended${filterByFavorites ? ' with a favorite artist' : ''} in this range. Search, filter by venue, artist or month, and open any event on Eventernote.`}>
+                  <RecentEventsList
+                    key={`${userId}-${dateRangeKey.start}-${dateRangeKey.end}`}
+                    events={chartFilteredEvents}
+                    onExportPNG={exportEventsListAsPNG}
+                    eventsListRef={eventsListRef}
+                  />
+                </ReportSection>
               )}
             </VStack>
           </Box>
         )}
 
-        {/* Hidden export div */}
-        {analytics && chartAnalytics && (
-          <ExportPreview
-            exportRef={exportRef}
-            analytics={analytics}
-            chartAnalytics={chartAnalytics}
-            userId={userId!}
-            artistsViewLimit={artistsViewLimit}
-            venuesViewLimit={venuesViewLimit}
-          />
-        )}
       </VStack>
+
+      <ShareImageDrawer open={shareOpen} onOpenChange={setShareOpen} data={posterData} />
+
+      <CompareDrawer
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        userId={userId}
+        userLabel={profileName || userId}
+        events={filteredEvents}
+        range={dateRangeKey}
+        rangeLabel={dateRange.startDate ? `${formatDisplayDate(dateRange.startDate)} to ${dateRange.endDate ? formatDisplayDate(dateRange.endDate) : 'today'}` : 'all time'}
+        recentUsers={recentUsers}
+        onOpenUser={(id) => { setCompareOpen(false); openUser(id); }}
+      />
+
+      <PeopleDrawer
+        open={peopleTab !== null}
+        tab={peopleTab || 'following'}
+        userId={userId}
+        expected={userProfileData?.data ? { following: userProfileData.data.following, followers: userProfileData.data.followers } : undefined}
+        onTabChange={setPeopleTab}
+        onOpenChange={(open) => !open && setPeopleTab(null)}
+        onSelect={openUser}
+      />
+
+      <ReceiptPanel
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+        userId={userId}
+        cardholder={userProfileData?.data?.displayName || userProfileData?.data?.username || userId}
+        dashboardRange={dateRange}
+        favoriteArtists={favoriteArtistsData?.data?.map(a => a.name) || []}
+      />
     </Box>
   );
 }

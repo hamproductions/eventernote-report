@@ -10,7 +10,6 @@ export { TopArtistsVenues } from "./TopArtistsVenues";
 export { FavoriteArtistsAttendance } from "./FavoriteArtistsAttendance";
 export { ArtistAttendanceGrowth } from "./ArtistAttendanceGrowth";
 export { MonthlyBreakdown } from "./MonthlyBreakdown";
-export { ExportPreview } from "./ExportPreview";
 export { RadarChart } from "./RadarChart";
 export { Highlights } from "./Highlights";
 export { Achievements } from "./Achievements";

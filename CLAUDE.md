@@ -584,6 +584,8 @@ export async function fetchAttendedEvents(
 
 ## CRITICAL RULES
 
+Attendance crawling must reconcile calendar month row counts with source registrations, then deduplicate by event ID. Source registration totals include duplicates and upcoming events. Global lists can omit IDs; use the complete calendar month partitions. Read names, venues, and performers from each event detail page because list associations can be incorrect or stale. Verify named artists by actor ID and catalog event intersection. Compare inclusive local calendar dates for attendance filters and denominators. Artist appearance sums are not unique event totals. Incomplete source partitions must raise an error. Every Eventernote request goes through `readEventernote` (max 4 concurrent, one start per 125 ms, identifying User-Agent); never call `fetch` on Eventernote directly. Registration counts come from the list row `div.note_count p`, not detail pages. Detail pages stay the source for performers (list rows mislabel about 5% of events); cache past-event details for 30 days so revisits cost only the month list pages plus new events. API queries do not auto-retry; show the error with a manual retry.
+
 1. **ALWAYS use exact selectors from reference** - Don't guess or approximate
 2. **Follow import order exactly** - Order matters for consistency
 3. **Use join(__dirname, path) for Vite aliases** - Not relative paths

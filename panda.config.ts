@@ -27,6 +27,27 @@ export default defineConfig({
 
   theme: {
     extend: {
+      slotRecipes: {
+        card: {
+          base: {
+            root: { boxShadow: "none", borderWidth: "1px", borderColor: "border.subtle" },
+            header: { p: { base: "4", md: "6" } },
+            body: { px: { base: "4", md: "6" }, pb: { base: "4", md: "6" } },
+            footer: { px: { base: "4", md: "6" }, pb: { base: "4", md: "6" } }
+          }
+        }
+      },
+      recipes: {
+        button: {
+          variants: {
+            size: {
+              xs: { h: { base: "11", md: "8" }, minW: { base: "11", md: "8" } },
+              sm: { h: { base: "11", md: "9" }, minW: { base: "11", md: "9" } },
+              md: { h: { base: "11", md: "10" }, minW: { base: "11", md: "10" } }
+            }
+          }
+        }
+      },
       tokens: {
         colors: {
           red: {
@@ -57,6 +78,17 @@ export default defineConfig({
       },
       semanticTokens: {
         colors: {
+          blue: {
+            default: { value: { _light: "{colors.blue.light.11}", _dark: "{colors.blue.dark.8}" } },
+            emphasized: { value: { _light: "{colors.blue.light.12}", _dark: "{colors.blue.dark.7}" } }
+          },
+          fg: {
+            subtle: { value: { _light: "#6f6f6f", _dark: "#949494" } },
+            error: { value: { _light: "{colors.red.light.11}", _dark: "{colors.red.dark.11}" } }
+          },
+          border: {
+            control: { value: { base: "{colors.gray.light.9}", _dark: "{colors.gray.dark.10}" } }
+          },
           red: {
             ...red.semanticTokens
           },

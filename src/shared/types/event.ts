@@ -9,6 +9,7 @@ export interface Event {
 // Enhanced Event (with parsed artists and date info)
 export interface EnhancedEvent extends Event {
   artists: string[];
+  attendees?: number;
   description?: string;
   imageUrl?: string;
   parsedDate: Date;

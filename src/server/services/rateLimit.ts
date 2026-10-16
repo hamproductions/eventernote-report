@@ -54,6 +54,7 @@ export const rateLimit = (maxRequests = 60, windowMs = 60_000) => {
   return new Elysia({ name: 'rateLimit' }).onBeforeHandle(
     { as: 'scoped' },
     ({ request, server, set }) => {
+      if (new URL(request.url).pathname.endsWith('/progress')) return;
       const key =
         request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
         server?.requestIP(request)?.address ??

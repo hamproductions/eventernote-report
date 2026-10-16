@@ -162,7 +162,7 @@ export function Achievements(props: AchievementsProps) {
             <Card.Description>Milestones unlocked in this period</Card.Description>
           </Box>
           <HStack gap="1" alignItems="baseline">
-            <Text size="2xl" fontWeight="black" color="colorPalette.default">
+            <Text size="2xl" fontWeight="black" color="colorPalette.text">
               {unlocked.length}
             </Text>
             <Text size="sm" color="fg.muted">

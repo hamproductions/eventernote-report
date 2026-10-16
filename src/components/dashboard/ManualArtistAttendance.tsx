@@ -35,7 +35,7 @@ export function ManualArtistAttendance({ userId, dateRange }: {
   const registrations = useQuery({
     queryKey: ["artist-registrations", userId, start, end],
     queryFn: () => readResult<{ href: string; date: string }[]>(`/api/artists/registrations/${encodeURIComponent(userId)}?${params}`),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
     retry: false
   });
   const results = useQuery({
@@ -48,7 +48,7 @@ export function ManualArtistAttendance({ userId, dateRange }: {
     queryKey: ["artist-catalog", artist?.href, start, end],
     queryFn: () => readResult<{ events: { href: string; date: string }[] }>(`/api/artists/catalog?href=${encodeURIComponent(artist!.href)}&${params}`),
     enabled: !!artist,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
     retry: false
   });
   const eligible = catalog.data?.events.filter(event => (!start || event.date >= start) && event.date <= end) || [];
@@ -71,7 +71,7 @@ export function ManualArtistAttendance({ userId, dateRange }: {
                 placeholder="Artist name or Eventernote artist URL"
                 value={input}
                 onChange={event => setInput(event.target.value)}
-                className={css({ flex: "1", minW: "180px", p: "3", borderWidth: "1px", borderColor: "border.default", borderRadius: "md", bg: "bg.default", color: "fg.default" })}
+                className={css({ flex: "1", minW: "180px", p: "3", borderWidth: "1px", borderColor: "border.control", borderRadius: "md", bg: "bg.default", color: "fg.default" })}
               />
               <Button type="submit" loading={results.isFetching} disabled={!input.trim()}>Search Artist</Button>
             </HStack>
@@ -101,7 +101,7 @@ export function ManualArtistAttendance({ userId, dateRange }: {
                   <Text>{attended} went</Text>
                   <Text>{eligible.length - attended} missed</Text>
                   <Text>{eligible.length} total</Text>
-                  <Text fontWeight="bold" color="colorPalette.default">{rate === null ? "No events in this period" : `${rate}% attendance`}</Text>
+                  <Text fontWeight="bold" color="colorPalette.text">{rate === null ? "No events in this period" : `${rate}% attendance`}</Text>
                 </HStack>
               )}
             </VStack>

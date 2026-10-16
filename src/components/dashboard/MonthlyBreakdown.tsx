@@ -19,9 +19,9 @@ export function MonthlyBreakdown({ monthlyBreakdown }: MonthlyBreakdownProps) {
   return (
     <Card.Root>
       <Card.Header>
-        <Card.Title>Monthly Activity</Card.Title>
+        <Card.Title>Events per month</Card.Title>
         <Card.Description>
-          Number of events attended each month
+          Which months were busiest
         </Card.Description>
       </Card.Header>
       <Card.Body>

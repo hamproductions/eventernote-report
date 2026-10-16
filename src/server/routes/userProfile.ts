@@ -4,6 +4,7 @@ import { fetchArtistsTotalEvents } from '../crawlers/artistTotalEvents';
 import { cache } from '../services/cache';
 import type { UserProfile } from '../crawlers/userProfile';
 import { fetchRegisteredEvents } from '../crawlers/attendedEvents';
+import { fetchUserConnections, type ConnectedUser } from '../crawlers/userConnections';
 
 interface UserProfileWithAttendance extends UserProfile {
   artistAttendance: {
@@ -17,6 +18,36 @@ interface UserProfileWithAttendance extends UserProfile {
 }
 
 export const userProfileRoutes = new Elysia({ prefix: '/user-profile' })
+  .get(
+    '/:userId/connections',
+    async ({ params }) => {
+      const cacheKey = `user-connections:${params.userId}`;
+      const cached = cache.get<{ following: ConnectedUser[]; followers: ConnectedUser[] }>(cacheKey);
+      if (cached) {
+        return { success: true, data: cached };
+      }
+
+      try {
+        const [following, followers] = await Promise.all([
+          fetchUserConnections(params.userId, 'following'),
+          fetchUserConnections(params.userId, 'follower')
+        ]);
+        const data = { following, followers };
+        cache.set(cacheKey, data, 6 * 60 * 60);
+        return { success: true, data };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch followers'
+        };
+      }
+    },
+    {
+      params: t.Object({
+        userId: t.String()
+      })
+    }
+  )
   .get(
     '/:userId',
     async ({ params, query }) => {
@@ -71,7 +102,7 @@ export const userProfileRoutes = new Elysia({ prefix: '/user-profile' })
           artistAttendance
         };
 
-        cache.set(cacheKey, result, 10 * 60);
+        cache.set(cacheKey, result, 60 * 60);
 
         return { success: true, data: result };
       } catch (error) {

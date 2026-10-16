@@ -1,4 +1,5 @@
 import { parseHTML } from 'linkedom';
+import { readEventernote } from './readEventernote';
 import type { Event } from '../../shared/types/event';
 import { cache } from '../services/cache';
 
@@ -48,12 +49,7 @@ export async function searchEvents(keyword: string, limit = 20): Promise<Searche
   const url = `https://www.eventernote.com/events/search?keyword=${encodeURIComponent(keyword)}&limit=${limit}`;
 
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const html = await response.text();
+    const html = await readEventernote(url, 2);
     const events = parseSearchResults(html);
 
     cache.set(cacheKey, events, 60 * 60);

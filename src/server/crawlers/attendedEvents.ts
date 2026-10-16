@@ -16,7 +16,7 @@ export function getAttendanceProgress(userId: string, startDate?: string, endDat
 }
 
 export function attendanceCacheKey(userId: string, startDate?: string, endDate?: string): string {
-  return `events:${userId}:${startDate || 'all'}:${endDate || 'all'}`;
+  return `events-v2:${userId}:${startDate || 'all'}:${endDate || 'all'}`;
 }
 
 export async function fetchRegisteredEvents(userId: string, startDate?: string, endDate?: string): Promise<EnhancedEvent[]> {
@@ -97,6 +97,7 @@ async function crawlRegisteredEvents(userId: string, startDate?: string, endDate
         const name = link?.textContent?.trim();
         const date = row.querySelector('div.date > p')?.textContent?.trim();
         const place = row.querySelector('div.place > a')?.textContent?.trim() || '';
+        const attendees = Number(row.querySelector('div.note_count p')?.textContent?.trim());
         if (!href || !name || !date) throw new Error('Incomplete attendance entry');
         if (events.has(href)) continue;
         const parsedDate = new Date(`${date.slice(0, 10)}T00:00:00`);
@@ -107,6 +108,7 @@ async function crawlRegisteredEvents(userId: string, startDate?: string, endDate
           date,
           place,
           artists: [],
+          attendees: Number.isFinite(attendees) ? attendees : undefined,
           parsedDate,
           dayOfWeek: parsedDate.toLocaleDateString('en-US', { weekday: 'long' }),
           month: parsedDate.toLocaleDateString('en-US', { month: 'long' }),
@@ -127,7 +129,7 @@ async function crawlRegisteredEvents(userId: string, startDate?: string, endDate
   const result = Array.from(events.values())
     .filter(event => (!startDate || event.date.slice(0, 10) >= startDate) && (!endDate || event.date.slice(0, 10) <= endDate))
     .sort((a, b) => b.date.localeCompare(a.date));
-  cache.set(`registered-${attendanceCacheKey(userId, startDate, endDate)}`, result, 5 * 60);
+  cache.set(`registered-${attendanceCacheKey(userId, startDate, endDate)}`, result, 60 * 60);
   return result;
 }
 
@@ -149,11 +151,11 @@ async function crawlAttendedEvents(userId: string, startDate?: string, endDate?:
       const event = result[index];
       const details = await scrapeEventDetails(event.href);
       if (details.date !== event.date.slice(0, 10)) throw new Error(`Event date mismatch: ${event.href}`);
-      verified[index] = { ...event, name: details.name, place: details.place, artists: details.artists };
+      verified[index] = { ...event, name: details.name, place: details.place, artists: details.artists, attendees: event.attendees ?? details.attendees };
       progress.set(key, { stage: 'details', loaded: ++loaded, total: result.length });
     }
   }));
-  cache.set(attendanceCacheKey(userId, startDate, endDate), verified, 5 * 60);
+  cache.set(attendanceCacheKey(userId, startDate, endDate), verified, 60 * 60);
   progress.delete(key);
   return verified;
 }

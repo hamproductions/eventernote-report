@@ -1,6 +1,7 @@
 import { VStack, Box } from 'styled-system/jsx';
 import * as Card from '~/components/ui/styled/card';
 import { Text } from '~/components/ui/text';
+import { InfoTip } from './InfoTip';
 import { type StatSection, type StatItem, STAT_SECTIONS, getStreakUnit } from './StatConfig';
 
 interface StatDisplayProps {
@@ -14,10 +15,7 @@ export function StatDisplay({ analytics, sections = STAT_SECTIONS }: StatDisplay
   return (
     <VStack gap="8" alignItems="stretch">
       <Card.Root>
-        <Card.Header>
-          <Card.Title>Overview</Card.Title>
-        </Card.Header>
-        <Card.Body>
+        <Card.Body pt="6">
           <VStack gap="6" alignItems="stretch">
             {sections.map((section) => (
               <VStack key={section.title} gap="3" alignItems="stretch">
@@ -61,20 +59,13 @@ function StatCard({ stat, analytics }: StatCardProps) {
     return 'lg';
   };
 
-  // Get color for primary value
-  const getPrimaryColor = () => {
-    if (isCurrentStreak) {
-      return isActive ? 'green.default' : 'fg.muted';
-    }
-    return stat.format === 'number' || stat.format === 'percentage'
-      ? 'colorPalette.default'
-      : 'fg.default';
-  };
+  const primaryColor = isCurrentStreak && !isActive ? 'fg.muted' : 'fg.default';
 
   return (
     <VStack gap="1" alignItems="flex-start">
-      <Text size="xs" color="fg.muted" fontWeight="medium">
+      <Text size="xs" color="fg.muted" fontWeight="medium" display="inline-flex" alignItems="center">
         {stat.label}
+        {stat.help && <InfoTip label={stat.label}>{stat.help}</InfoTip>}
       </Text>
 
       {stat.format === 'date' && secondaryValue ? (
@@ -96,7 +87,7 @@ function StatCard({ stat, analytics }: StatCardProps) {
           <Text
             size={getPrimarySize()}
             fontWeight="bold"
-            color={getPrimaryColor()}
+            color={primaryColor}
           >
             {primaryValue || 0}
           </Text>

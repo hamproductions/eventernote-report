@@ -43,3 +43,13 @@ export function formatDate(date: Date | null): string {
   if (!date) return 'N/A';
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
+
+export function formatDisplayDate(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(`${value.slice(0, 10)}T00:00:00`) : value;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function formatDisplayMonth(value: string): string {
+  const [year, month] = value.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}

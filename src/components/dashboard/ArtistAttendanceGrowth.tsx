@@ -36,9 +36,9 @@ export function ArtistAttendanceGrowth({
   return (
     <Card.Root>
       <Card.Header>
-        <Card.Title>Cumulative Artist Attendance</Card.Title>
+        <Card.Title>How your top artists added up</Card.Title>
         <Card.Description>
-          Track how your attendance grows for your most-seen artists
+          Running total of events per artist. Steeper lines mean you saw them more often in that stretch.
         </Card.Description>
       </Card.Header>
       <Card.Body>
@@ -70,7 +70,7 @@ export function ArtistAttendanceGrowth({
                   color: token.var("colors.fg.default")
                 }}
               />
-              <Legend />
+              <Legend formatter={(value) => <span style={{ color: token.var("colors.fg.default") }}>{value}</span>} />
               {displayedArtists.map((artist, index) => (
                 <Line
                   key={artist}

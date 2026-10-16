@@ -1,4 +1,5 @@
 import { parseHTML } from 'linkedom';
+import { readEventernote } from './readEventernote';
 
 export interface UserProfile {
   username: string;
@@ -18,12 +19,7 @@ export interface FavoriteArtistWithCount {
 export async function fetchUserProfile(userId: string): Promise<UserProfile> {
   const url = `https://www.eventernote.com/users/${userId}`;
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  const html = await response.text();
+  const html = await readEventernote(url, 2);
   const { document } = parseHTML(html);
 
   const scoreTable = document.querySelector('div.gb_score_table table');

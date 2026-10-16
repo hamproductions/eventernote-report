@@ -14,13 +14,17 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
     '/user/:userId',
     async ({ params, query }) => {
       const { userId } = params;
-      const { startDate, endDate } = query;
+      const { startDate, endDate, refresh } = query;
 
       try {
         console.log(`📡 Fetching events for user: ${userId}`);
 
         // Check memory cache first
         const cacheKey = attendanceCacheKey(userId, startDate, endDate);
+        if (refresh === '1') {
+          cache.delete(cacheKey);
+          cache.delete(`registered-${cacheKey}`);
+        }
         const cached = cache.get<any[]>(cacheKey);
 
         if (cached) {
@@ -43,7 +47,7 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
           endDate
         });
 
-        // Store in memory cache (5 min TTL)
+        // Store in memory cache (1 hour TTL)
         const result = {
           events,
           totalCount: events.length
@@ -75,7 +79,8 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
       }),
       query: t.Object({
         startDate: t.Optional(t.String()),
-        endDate: t.Optional(t.String())
+        endDate: t.Optional(t.String()),
+        refresh: t.Optional(t.String())
       })
     }
   )

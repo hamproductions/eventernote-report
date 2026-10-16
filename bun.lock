@@ -22,6 +22,7 @@
         "drizzle-orm": "^0.44.6",
         "elysia": "^1.4.11",
         "elysia-connect-middleware": "^0.0.6",
+        "escpos-web-print": "^0.1.0",
         "linkedom": "^0.18.12",
         "lucide-react": "^0.462.0",
         "modern-screenshot": "^4.6.6",
@@ -29,6 +30,7 @@
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "recharts": "^2.15.0",
+        "uqr": "0.1.2",
         "vike": "^0.4.242",
         "vike-react": "^0.6.9",
         "zustand": "^5.0.2",
@@ -837,6 +839,8 @@
     "escalade": ["escalade@3.1.2", "", {}, "sha512-ErCHMCae19vR8vQGe50xIsVomy19rg6gFu3+r3jkEO46suLMWBksvVyoGgQV+jOfl84ZSOSlmv6Gxa89PmTGmA=="],
 
     "escape-html": ["escape-html@1.0.3", "", {}, "sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow=="],
+
+    "escpos-web-print": ["escpos-web-print@0.1.0", "", {}, "sha512-L2xYKNpdbIMsdWiI/y7s8tDvadREb7z8NutbSD+IFjv1Q+o9rmYcUTdlJVzKw+1SLs9ALOvC3yWZMj2t+zbgJw=="],
 
     "estree-walker": ["estree-walker@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.0" } }, "sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g=="],
 

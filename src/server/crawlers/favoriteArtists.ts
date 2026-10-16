@@ -1,4 +1,5 @@
 import { parseHTML } from 'linkedom';
+import { readEventernote } from './readEventernote';
 
 export interface FavoriteArtist {
   name: string;
@@ -11,12 +12,7 @@ export async function fetchFavoriteArtists(
   const url = `https://www.eventernote.com/users/${userId}`;
 
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const html = await response.text();
+    const html = await readEventernote(url, 2);
     const { document } = parseHTML(html);
 
     // Find the favorite artists section by heading

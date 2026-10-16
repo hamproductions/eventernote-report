@@ -46,4 +46,9 @@ drizzle/migrations/*.sql
 .sample-*
 .reference-*
 
-.bun-build
+*.bun-build
+
+# Local agent notes, evidence and audits
+conductor/
+dogfood-output/
+anti-slop/

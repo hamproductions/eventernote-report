@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Box } from "styled-system/jsx";
 import * as Card from "~/components/ui/styled/card";
 import {
@@ -7,8 +8,7 @@ import {
   PolarRadiusAxis,
   Radar,
   ResponsiveContainer,
-  Tooltip,
-  Legend
+  Tooltip
 } from "recharts";
 import { token } from "styled-system/tokens";
 import type { RadarStats } from "~/shared/types/stats";
@@ -19,15 +19,27 @@ interface RadarChartProps {
 
 // Dimension descriptions
 const dimensionDescriptions: Record<string, string> = {
-  "Multi-Venue\nDays": "Percentage of active days with multiple venues (10% = 100)",
-  "Core\nArtists": "Number of statistically frequent artists (20 artists = 100)",
-  "Attendance\nRate": "Days attending events (30% = 100)",
-  "Consistency": "Regularity of attendance patterns (70 CV score = 100)",
-  "Weekend": "Percentage of weekends spent eventing (100% = 100)",
-  "Events\nper Day": "Average events per active day (1.5 events/day = 100)"
+  "Multi-Venue\nDays": "Share of event days where you went to 2+ venues. 10% fills the axis.",
+  "Core\nArtists": "Artists you saw far more often than your average artist. 20 such artists fills the axis.",
+  "Attendance\nRate": "Days with an event, out of all days from your first to last event. 30% fills the axis.",
+  "Consistency": "How evenly spaced your event days are. Steady gaps score high, bursts and long breaks score low.",
+  "Weekend": "Weekends with at least one event, out of all weekends in the span.",
+  "Events\nper Day": "Average events on days you went out. 1.5 per day fills the axis."
 };
 
 export function RadarChart({ radarStats }: RadarChartProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const narrow = width > 0 && width < 440;
+
+  useEffect(() => {
+    const element = chartRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   // Log radar stats to browser console for debugging
   console.log("🎯 RADAR STATS:", radarStats);
 
@@ -82,34 +94,31 @@ export function RadarChart({ radarStats }: RadarChartProps) {
       <Card.Header>
         <Card.Title>Eventing Profile</Card.Title>
         <Card.Description>
-          Your unique eventing characteristics across 6 dimensions (hover chart for details)
+          Six habits scored 0 to 100. Raw values and how each is scored are listed below.
         </Card.Description>
       </Card.Header>
       <Card.Body>
-        <Box h="500px" w="full">
+        <Box ref={chartRef} h={{ base: "300px", md: "360px" }} w="full">
           <ResponsiveContainer width="100%" height="100%">
-            <RechartsRadarChart data={chartData} outerRadius="60%">
+            <RechartsRadarChart data={chartData} outerRadius={narrow ? Math.max(48, Math.min(width / 2 - 56, 120)) : "60%"}>
               <PolarGrid
                 stroke={token.var("colors.border.default")}
                 opacity={0.3}
               />
               <PolarAngleAxis
                 dataKey="dimension"
-                tick={{
-                  fill: token.var("colors.fg.default"),
-                  fontSize: 12,
-                  fontWeight: 500
-                }}
-                style={{ whiteSpace: 'pre' }}
-              />
-              <PolarRadiusAxis
-                angle={90}
-                domain={[0, 100]}
-                tick={{
-                  fill: token.var("colors.fg.muted"),
-                  fontSize: 10
+                tick={({ x, y, payload, textAnchor }: { x: number; y: number; payload: { value: string }; textAnchor: "start" | "middle" | "end" }) => {
+                  const lines = narrow ? payload.value.split("\n") : [payload.value.replace(/\n/g, " ")];
+                  return (
+                    <text x={x} y={y - (lines.length - 1) * 6} textAnchor={textAnchor} fill={token.var("colors.fg.default")} fontSize={narrow ? 11 : 12} fontWeight={500}>
+                      {lines.map((line, index) => (
+                        <tspan key={line} x={x} dy={index ? "1.15em" : 0}>{line}</tspan>
+                      ))}
+                    </text>
+                  );
                 }}
               />
+              <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
               <Radar
                 name="Your Stats"
                 dataKey="value"
@@ -156,7 +165,7 @@ export function RadarChart({ radarStats }: RadarChartProps) {
                       <Box fontWeight="semibold" mb="1" color="fg.default">
                         {dimension.replace(/\n/g, " ")}
                       </Box>
-                      <Box fontSize="lg" fontWeight="bold" color="colorPalette.default" mb="2">
+                      <Box fontSize="lg" fontWeight="bold" color="colorPalette.text" mb="2">
                         {formattedValue}
                       </Box>
                       <Box fontSize="xs" color="fg.muted">
@@ -166,13 +175,21 @@ export function RadarChart({ radarStats }: RadarChartProps) {
                   );
                 }}
               />
-              <Legend
-                wrapperStyle={{
-                  paddingTop: "20px"
-                }}
-              />
             </RechartsRadarChart>
           </ResponsiveContainer>
+        </Box>
+        <Box as="dl" display="grid" gridTemplateColumns="repeat(auto-fill, minmax(200px, 1fr))" gap="3" mt="4">
+          {chartData.map((item) => (
+            <Box key={item.dimension}>
+              <Box as="dt" display="flex" justifyContent="space-between" gap="2" fontSize="xs" fontWeight="semibold" color="fg.default">
+                <span>{item.dimension.replace(/\n/g, " ")}</span>
+                <Box as="span" color="colorPalette.text" fontVariantNumeric="tabular-nums">
+                  {item.label === "artists" ? Math.round(item.actualValue) : item.actualValue.toFixed(1)}{item.label === "%" ? "%" : item.label ? ` ${item.label}` : ""}
+                </Box>
+              </Box>
+              <Box as="dd" fontSize="xs" color="fg.muted" mt="0.5">{dimensionDescriptions[item.dimension]}</Box>
+            </Box>
+          ))}
         </Box>
       </Card.Body>
     </Card.Root>

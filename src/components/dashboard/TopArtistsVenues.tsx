@@ -1,4 +1,4 @@
-import { Grid, VStack, HStack, Box } from "styled-system/jsx";
+import { Grid, VStack, HStack, Box, styled } from "styled-system/jsx";
 import { css } from "styled-system/css";
 import * as Card from "~/components/ui/styled/card";
 import * as Accordion from "~/components/ui/styled/accordion";
@@ -52,7 +52,7 @@ function AttendanceSummary({
         <Text size="xs" fontWeight="semibold" color="fg.default">
           Attendance
         </Text>
-        <Text size="xs" fontWeight="bold" color="colorPalette.default">
+        <Text size="xs" fontWeight="bold" color="colorPalette.text">
           {pct}%
         </Text>
       </HStack>
@@ -162,7 +162,7 @@ export function TopArtistsVenues({
                             <Text
                               size="lg"
                               fontWeight="bold"
-                              color="colorPalette.default"
+                              color="colorPalette.text"
                               minW="10"
                               textAlign="right"
                             >
@@ -200,9 +200,8 @@ export function TopArtistsVenues({
                         {events
                           .filter((e) => e.artists?.includes(artist))
                           .map((event) => (
-                            <Box
+                            <styled.a
                               key={event.href}
-                              as="a"
                               href={`https://eventernote.com${event.href}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -215,7 +214,7 @@ export function TopArtistsVenues({
                               <Text size="sm" color="fg.muted">
                                 • {event.date.split(" ")[0]} - {event.name}
                               </Text>
-                            </Box>
+                            </styled.a>
                           ))}
                       </VStack>
                     </Accordion.ItemContent>
@@ -270,9 +269,8 @@ export function TopArtistsVenues({
                   <Accordion.ItemContent>
                     <VStack gap="2" alignItems="stretch" pt="3">
                       {venueEvents.map((event) => (
-                        <Box
+                        <styled.a
                           key={event.href}
-                          as="a"
                           href={`https://eventernote.com${event.href}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -285,7 +283,7 @@ export function TopArtistsVenues({
                           <Text size="sm" color="fg.muted">
                             • {event.date.split(" ")[0]} - {event.name}
                           </Text>
-                        </Box>
+                        </styled.a>
                       ))}
                     </VStack>
                   </Accordion.ItemContent>

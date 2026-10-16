@@ -23,7 +23,7 @@ export const favoriteArtistsRoutes = new Elysia({ prefix: '/favorite-artists' })
         const artists = await fetchFavoriteArtists(userId);
 
         // Cache for 1 hour
-        cache.set(cacheKey, artists, 60 * 60);
+        cache.set(cacheKey, artists, 6 * 60 * 60);
 
         return {
           success: true,

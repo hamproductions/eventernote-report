@@ -8,6 +8,7 @@ interface EventDetails {
   date: string;
   place: string;
   artists: string[];
+  attendees?: number;
   description?: string;
   imageUrl?: string;
 }
@@ -51,6 +52,11 @@ export async function scrapeEventDetails(
     // Remove duplicates
     const uniqueArtists = [...new Set(artists)];
 
+    const attendeesText = Array.from(document.querySelectorAll('h2'))
+      .map(heading => heading.textContent || '')
+      .find(text => text.includes('参加のイベンター'));
+    const attendees = Number(attendeesText?.match(/\((\d+)人\)/)?.[1] ?? 0);
+
     // Extract description
     const descriptionEl = document.querySelector(
       '.event-description, .description, [class*="description"]'
@@ -68,12 +74,13 @@ export async function scrapeEventDetails(
       date,
       place,
       artists: uniqueArtists,
+      attendees,
       description,
       imageUrl: imageUrl || undefined
     };
 
-    // Cache for 24 hours
-    cache.set(cacheKey, result, 24 * 60 * 60);
+    const isPast = date < new Date().toISOString().slice(0, 10);
+    cache.set(cacheKey, result, isPast ? 30 * 24 * 60 * 60 : 24 * 60 * 60);
 
     console.log(`✅ Scraped event details: ${eventHref} (${uniqueArtists.length} artists)`);
 

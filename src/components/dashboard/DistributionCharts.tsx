@@ -1,116 +1,65 @@
-import { Box, Grid } from "styled-system/jsx";
+import { Box, Grid, HStack, VStack } from "styled-system/jsx";
 import * as Card from "~/components/ui/styled/card";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Label
-} from "recharts";
+import { Text } from "~/components/ui/text";
 import type { EnhancedEvent } from "~/shared/types/event";
 
 interface DistributionChartsProps {
   topVenues: [string, EnhancedEvent[]][];
   topArtists: [string, number][];
+  totalEvents: number;
+}
+
+function ShareList({ rows, totalEvents }: { rows: [string, number][]; totalEvents: number }) {
+  return (
+    <VStack as="ol" gap="3" alignItems="stretch">
+      {rows.map(([name, count]) => {
+        const share = totalEvents ? (count / totalEvents) * 100 : 0;
+        return (
+          <Box as="li" key={name}>
+            <HStack justifyContent="space-between" gap="3" mb="1">
+              <Text size="sm" truncate>{name}</Text>
+              <Text size="sm" color="fg.muted" fontVariantNumeric="tabular-nums" whiteSpace="nowrap">
+                {count} · {share.toFixed(share < 10 ? 1 : 0)}%
+              </Text>
+            </HStack>
+            <Box h="2" bg="bg.muted" borderRadius="full" overflow="hidden">
+              <Box h="full" bg="colorPalette.default" borderRadius="full" style={{ width: `${share}%` }} />
+            </Box>
+          </Box>
+        );
+      })}
+    </VStack>
+  );
 }
 
 export function DistributionCharts({
   topVenues,
-  topArtists
+  topArtists,
+  totalEvents
 }: DistributionChartsProps) {
   return (
     <Grid gap="6" columns={{ base: 1, lg: 2 }}>
-      {/* Venue Distribution */}
       <Card.Root>
         <Card.Header>
-          <Card.Title>Venue Distribution</Card.Title>
+          <Card.Title>Share of events by venue</Card.Title>
           <Card.Description>
-            How your events are spread across venues
+            Your top 5 venues, as a share of all {totalEvents} events in this range
           </Card.Description>
         </Card.Header>
         <Card.Body>
-          <Box h="300px" w="full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={topVenues.slice(0, 5).map(([name, events]) => ({
-                    name,
-                    value: events.length
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ percent }) =>
-                    `${(percent * 100).toFixed(0)}%`
-                  }
-                  outerRadius={70}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {topVenues.slice(0, 5).map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={
-                        ["#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981"][
-                          index % 5
-                        ]
-                      }
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
+          <ShareList rows={topVenues.slice(0, 5).map(([name, events]) => [name, events.length])} totalEvents={totalEvents} />
         </Card.Body>
       </Card.Root>
 
-      {/* Artist Distribution */}
       <Card.Root>
         <Card.Header>
-          <Card.Title>Artist Distribution</Card.Title>
+          <Card.Title>Share of events by artist</Card.Title>
           <Card.Description>
-            How your attendance is distributed across artists
+            How many of your {totalEvents} events each top artist performed at. Events often have several artists, so these overlap.
           </Card.Description>
         </Card.Header>
         <Card.Body>
-          <Box h="300px" w="full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={topArtists.slice(0, 5).map(([name, count]) => ({
-                    name,
-                    value: count
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ percent }) =>
-                    `${(percent * 100).toFixed(0)}%`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {topArtists.slice(0, 5).map((_, index) => (
-                    <Cell
-                      key={`cell-artist-${index}`}
-                      fill={
-                        ["#f59e0b", "#ec4899", "#8b5cf6", "#3b82f6", "#10b981"][
-                          index % 5
-                        ]
-                      }
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
+          <ShareList rows={topArtists.slice(0, 5)} totalEvents={totalEvents} />
         </Card.Body>
       </Card.Root>
     </Grid>

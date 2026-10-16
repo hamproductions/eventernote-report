@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Box, Grid, HStack, VStack, styled } from "styled-system/jsx";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
+import { InfoTip } from "~/components/dashboard/InfoTip";
 import { PillGroup } from "~/components/dashboard/PillGroup";
 import type { Overlap, OverlapItem, OverlapKind, OverlapSet } from "~/shared/utils/overlap";
 import { SIDE_COLORS } from "./palette";
@@ -98,8 +99,7 @@ export function OverlapPanel({ overlap, nameA, nameB }: OverlapPanelProps) {
   return (
     <VStack gap="5" alignItems="stretch">
       <Box>
-        <Text as="h2" fontSize="lg" fontWeight="semibold">How much your genba overlap</Text>
-        <Text size="sm" color="fg.muted">Percentages are shared divided by everything either of you has. Pick one to see the Venn diagram.</Text>
+        <HStack gap="1"><Text as="h2" fontSize="lg" fontWeight="semibold">Genba overlap</Text><InfoTip label="Overlap">Shared divided by everything either of you has. Events are matched by Eventernote event ID.</InfoTip></HStack>
       </Box>
 
       <Grid gridTemplateColumns={{ base: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }} gap="3">
@@ -112,7 +112,6 @@ export function OverlapPanel({ overlap, nameA, nameB }: OverlapPanelProps) {
         <VennDiagram nameA={nameA} nameB={nameB} sizeA={set.sizeA} sizeB={set.sizeB} shared={set.shared} unit={unit.plural} />
         <VStack gap="3" alignItems="stretch">
           <PillGroup label="Compare by" value={kind} options={KINDS} onChange={setKind} />
-          <Text size="sm" color="fg.muted">{unit.blurb}.</Text>
           <VStack as="ul" gap="1.5" alignItems="stretch" fontSize="sm">
             <li><b>{set.shared}</b> {set.shared === 1 ? unit.singular : unit.plural} in common, {percent(set.jaccard)} of the {set.sizeA + set.sizeB - set.shared} either of you has.</li>
             <li>That is {percent(sharedOfA)} of {nameA}&apos;s {set.sizeA} and {percent(sharedOfB)} of {nameB}&apos;s {set.sizeB}.</li>

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Moon, Sun, X } from "lucide-react";
+import { ArrowLeft, Moon, SlidersHorizontal, Sun, X } from "lucide-react";
 import { Box, Grid, HStack, VStack, styled } from "styled-system/jsx";
 import { css } from "styled-system/css";
 import { Button } from "~/components/ui/button";
 import { IconButton } from "~/components/ui/icon-button";
 import { Text } from "~/components/ui/text";
 import { ArtistPanel } from "~/components/connections/ArtistPanel";
-import { ForceGraph, type ColorBy } from "~/components/connections/ForceGraph";
+import { ForceGraph } from "~/components/connections/ForceGraph";
 import { OverlapPanel } from "~/components/connections/OverlapPanel";
-import { clusterColor, SIDE_COLORS } from "~/components/connections/palette";
+import { SIDE_COLORS } from "~/components/connections/palette";
+import { InfoTip } from "~/components/dashboard/InfoTip";
 import { LoadingStatus } from "~/components/dashboard/LoadingStatus";
 import { PillGroup } from "~/components/dashboard/PillGroup";
 import { UserInputForm } from "~/components/dashboard/UserInputForm";
@@ -64,35 +65,24 @@ function Slider({ label, value, min, max, step = 1, onChange, hint }: { label: s
   );
 }
 
-function Legend({ comparing, colorBy, nameA, nameB }: { comparing: boolean; colorBy: ColorBy; nameA: string; nameB: string }) {
+function Legend({ nameA, nameB }: { nameA: string; nameB: string }) {
   const dot = (color: string, label: string) => (
-    <HStack key={label} gap="1.5">
-      <Box w="3" h="3" borderRadius="full" flexShrink="0" style={{ background: color }} />
+    <HStack gap="1.5">
+      <Box w="2.5" h="2.5" borderRadius="full" flexShrink="0" style={{ background: color }} />
       <Text size="xs" color="fg.muted">{label}</Text>
     </HStack>
   );
   return (
     <HStack gap="4" flexWrap="wrap">
-      {comparing && colorBy === "person" ? (
-        <>
-          {dot(SIDE_COLORS.mine, `${nameA} only`)}
-          {dot(SIDE_COLORS.theirs, `${nameB} only`)}
-          <HStack gap="1.5">
-            <svg width="12" height="12" viewBox="-6 -6 12 12" aria-hidden>
-              <path d="M0 -6 A6 6 0 0 0 0 6 Z" fill={SIDE_COLORS.mine} />
-              <path d="M0 -6 A6 6 0 0 1 0 6 Z" fill={SIDE_COLORS.theirs} />
-            </svg>
-            <Text size="xs" color="fg.muted">both saw</Text>
-          </HStack>
-          <HStack gap="1.5">
-            <Box w="4" h="0.5" style={{ background: SIDE_COLORS.both }} />
-            <Text size="xs" color="fg.muted">line: you both saw them together</Text>
-          </HStack>
-        </>
-      ) : (
-        <Text size="xs" color="fg.muted">Colour = group that tends to perform together</Text>
-      )}
-      <Text size="xs" color="fg.muted">Bigger dot = seen more · thicker, tighter line = together more</Text>
+      {dot(SIDE_COLORS.mine, nameA)}
+      {dot(SIDE_COLORS.theirs, nameB)}
+      <HStack gap="1.5">
+        <svg width="10" height="10" viewBox="-5 -5 10 10" aria-hidden>
+          <path d="M0 -5 A5 5 0 0 0 0 5 Z" fill={SIDE_COLORS.mine} />
+          <path d="M0 -5 A5 5 0 0 1 0 5 Z" fill={SIDE_COLORS.theirs} />
+        </svg>
+        <Text size="xs" color="fg.muted">both</Text>
+      </HStack>
     </HStack>
   );
 }
@@ -104,7 +94,7 @@ export default function Page() {
   const [otherId, setOtherId] = useState<string | null>(null);
   const [otherInput, setOtherInput] = useState("");
   const [options, setOptions] = useState<GraphOptions>(DEFAULT_GRAPH_OPTIONS);
-  const [colorBy, setColorBy] = useState<ColorBy>("person");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [highlightCluster, setHighlightCluster] = useState<number | null>(null);
@@ -292,15 +282,15 @@ export default function Page() {
 
         {!loading && !failure && !waitingForThem && (
           <VStack gap="4" alignItems="stretch">
-            <Grid gridTemplateColumns={{ base: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" }} gap={{ base: "3", md: "5" }} alignItems="end">
+            {filtersOpen && <Grid gridTemplateColumns={{ base: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" }} gap={{ base: "3", md: "5" }} alignItems="end">
               <Slider label="Min times seen" value={options.minEvents} min={1} max={10} onChange={(value) => setOption("minEvents", value)} hint="Hide artists you saw fewer times than this" />
               <Slider label="Min together" value={options.minTogether} min={1} max={6} onChange={(value) => setOption("minTogether", value)} hint="Only link artists who shared a stage at least this many times" />
               <Slider label="Max artists" value={options.maxNodes} min={10} max={150} step={5} onChange={(value) => setOption("maxNodes", value)} hint="Show only the most-seen artists" />
               <Slider label="Ignore line-ups over" value={options.maxArtistsPerEvent} min={3} max={40} onChange={(value) => setOption("maxArtistsPerEvent", value)} hint="Festival-size line-ups would link everyone to everyone, so they are left out of the links" />
-            </Grid>
+            </Grid>}
             <HStack gap="3" flexWrap="wrap" alignItems="center">
               {comparing && <PillGroup<Membership> label="Whose artists" value={options.membership} options={MEMBERSHIPS} onChange={(value) => setOption("membership", value)} />}
-              {comparing && <PillGroup<ColorBy> label="Colour by" value={colorBy} options={[["person", "Who saw them"], ["group", "Group"]]} onChange={setColorBy} />}
+              <Button size="sm" variant="outline" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><SlidersHorizontal /> Filters</Button>
               <label className={css({ display: "inline-flex", alignItems: "center", gap: "2", fontSize: "sm", minH: { base: "11", md: "auto" }, cursor: "pointer" })}>
                 <input type="checkbox" checked={showLabels} onChange={(event) => setShowLabels(event.target.checked)} /> Names
               </label>
@@ -347,17 +337,16 @@ export default function Page() {
               <ForceGraph
                 graph={graph}
                 comparing={comparing}
-                colorBy={colorBy}
                 showLabels={showLabels}
                 selected={selected}
                 highlightCluster={highlightCluster}
                 onSelect={(id) => pick(id as string, false)}
                 centerOn={centerOn}
               />
-              <Legend comparing={comparing} colorBy={colorBy} nameA={nameA} nameB={nameB} />
+              {comparing && <Legend nameA={nameA} nameB={nameB} />}
               <Text size="xs" color="fg.muted">
-                {graph.nodes.length} artists · {graph.links.length} links from {graph.pairEvents} events
-                {graph.skippedEvents > 0 && ` · ${graph.skippedEvents} big line-ups left out of the links`}. Drag to move, scroll or use the buttons to zoom, click an artist for details.
+                {graph.nodes.length} artists · {graph.links.length} links
+                <InfoTip label="the graph">Artists who perform together more often sit closer. Bigger dot means seen more, thicker line means together more. Drag nodes, scroll to zoom, click an artist for details.{graph.skippedEvents > 0 ? ` ${graph.skippedEvents} big line-ups are left out of the links.` : ""}</InfoTip>
               </Text>
             </VStack>
 
@@ -376,8 +365,8 @@ export default function Page() {
               ) : (
                 <>
                   <VStack gap="1" alignItems="stretch">
-                    <Text as="h3" fontWeight="semibold">Closest pairs</Text>
-                    <Text size="xs" color="fg.muted">Most shared stages. Percent = how often they appear together when either appears.</Text>
+                    <HStack gap="1"><Text as="h3" fontWeight="semibold">Closest pairs</Text><InfoTip label="closeness">Times they shared a stage, and how often they appear together when either appears.</InfoTip></HStack>
+                    
                     {closestPairs.map((link) => (
                       <styled.button key={`${link.a}|${link.b}`} type="button" display="flex" alignItems="center" w="full" onClick={() => pick(link.a)} justifyContent="space-between" gap="3" py="1.5" cursor="pointer" textAlign="left" borderBottomWidth="1px" borderColor="border.subtle" _hover={{ bg: "bg.subtle" }}>
                         <Text size="sm" truncate>{link.a} + {link.b}</Text>
@@ -388,8 +377,8 @@ export default function Page() {
 
                   {graph.clusters.length > 0 && (
                     <VStack gap="2" alignItems="stretch">
-                      <Text as="h3" fontWeight="semibold">Groups</Text>
-                      <Text size="xs" color="fg.muted">Artists who keep turning up together. Hover a group to light it up.</Text>
+                      <HStack gap="1"><Text as="h3" fontWeight="semibold">Groups</Text><InfoTip label="groups">Artists who keep turning up together. Hover a group to light it up on the graph.</InfoTip></HStack>
+                      
                       {graph.clusters.slice(0, maxClusterRows).map((cluster) => (
                         <Box
                           key={cluster.id}
@@ -402,7 +391,6 @@ export default function Page() {
                           _hover={{ bg: "bg.subtle" }}
                         >
                           <HStack gap="2" mb="1">
-                            <Box w="3" h="3" borderRadius="full" flexShrink="0" style={{ background: clusterColor(cluster.id) }} />
                             <Text size="xs" color="fg.muted">{cluster.members.length} artists</Text>
                           </HStack>
                           <HStack gap="1" flexWrap="wrap">

@@ -5,14 +5,11 @@ import { css } from "styled-system/css";
 import { IconButton } from "~/components/ui/icon-button";
 import type { ArtistGraph } from "~/shared/utils/artistGraph";
 import { ForceSim } from "~/shared/utils/forceLayout";
-import { clusterColor, SIDE_COLORS } from "./palette";
-
-export type ColorBy = "group" | "person";
+import { ACCENT, NODE_COLOR, SIDE_COLORS } from "./palette";
 
 interface ForceGraphProps {
   graph: ArtistGraph;
   comparing: boolean;
-  colorBy: ColorBy;
   showLabels: boolean;
   selected: string | null;
   highlightCluster: number | null;
@@ -28,7 +25,7 @@ function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function ForceGraph({ graph, comparing, colorBy, showLabels, selected, highlightCluster, onSelect, centerOn }: ForceGraphProps) {
+export function ForceGraph({ graph, comparing, showLabels, selected, highlightCluster, onSelect, centerOn }: ForceGraphProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const simRef = useRef<ForceSim | null>(null);
@@ -221,12 +218,12 @@ export function ForceGraph({ graph, comparing, colorBy, showLabels, selected, hi
   const topLabels = useMemo(() => new Set(graph.nodes.slice(0, MAX_LABELS).map((node) => node.id)), [graph]);
 
   const fillFor = (node: ArtistGraph["nodes"][number]) => {
-    if (comparing && colorBy === "person") return node.mine && node.theirs ? SIDE_COLORS.both : node.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
-    return clusterColor(node.cluster);
+    if (comparing) return node.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
+    return node.id === active || (highlightCluster !== null && node.cluster === highlightCluster) ? ACCENT : NODE_COLOR;
   };
   const linkColor = (link: ArtistGraph["links"][number]) => {
-    if (comparing && colorBy === "person") return link.mine && link.theirs ? SIDE_COLORS.both : link.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
-    return "var(--colors-fg-muted)";
+    if (comparing) return link.mine && link.theirs ? SIDE_COLORS.both : link.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
+    return active && (link.a === active || link.b === active) ? ACCENT : "var(--colors-fg-muted)";
   };
 
   const ready = points.length === graph.nodes.length;
@@ -272,7 +269,7 @@ export function ForceGraph({ graph, comparing, colorBy, showLabels, selected, hi
               const p = points[i];
               const r = radiusOf(node.count);
               const lit = isLit(node.id);
-              const split = comparing && colorBy === "person" && node.mine > 0 && node.theirs > 0;
+              const split = comparing && node.mine > 0 && node.theirs > 0;
               const showLabel = showLabels && (topLabels.has(node.id) || node.id === active || !!neighbours?.has(node.id) || view.k >= 1.8 || (highlightCluster !== null && inCluster(node.id)));
               return (
                 <g

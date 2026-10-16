@@ -1,11 +1,9 @@
-/** Fixed colours so the graph reads the same in light and dark mode. */
+/** One accent (blue) for you, neutral gray for the other person; follows the theme tokens. */
 export const SIDE_COLORS = {
-  mine: '#3b82f6',
-  theirs: '#f08a24',
-  both: '#8b5cf6'
+  mine: 'var(--colors-blue-9)',
+  theirs: 'var(--colors-gray-9)',
+  both: 'var(--colors-fg-default)'
 } as const;
 
-export const CLUSTER_COLORS = ['#4f8ef7', '#f2994a', '#27ae8f', '#d85a9a', '#9b6bdf', '#d9a826', '#4fb3d9', '#e0675a', '#8fa84a'] as const;
-export const NO_CLUSTER_COLOR = '#8a93a3';
-
-export const clusterColor = (cluster: number) => (cluster < 0 ? NO_CLUSTER_COLOR : CLUSTER_COLORS[cluster % CLUSTER_COLORS.length]);
+export const NODE_COLOR = 'var(--colors-gray-8)';
+export const ACCENT = 'var(--colors-blue-9)';

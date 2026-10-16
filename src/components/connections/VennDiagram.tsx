@@ -43,9 +43,9 @@ export function VennDiagram({ nameA, nameB, sizeA, sizeB, shared, unit }: VennDi
           <circle cx={cxA} cy={cy} r={rA} />
         </clipPath>
       </defs>
-      <circle cx={cxA} cy={cy} r={rA} fill={SIDE_COLORS.mine} fillOpacity={0.3} stroke={SIDE_COLORS.mine} strokeWidth={2} />
-      <circle cx={cxB} cy={cy} r={rB} fill={SIDE_COLORS.theirs} fillOpacity={0.3} stroke={SIDE_COLORS.theirs} strokeWidth={2} />
-      {shared > 0 && <circle cx={cxB} cy={cy} r={rB} fill={SIDE_COLORS.both} fillOpacity={0.45} clipPath={`url(#${clipId})`} />}
+      <circle cx={cxA} cy={cy} r={rA} fill={SIDE_COLORS.mine} fillOpacity={0.22} stroke={SIDE_COLORS.mine} strokeWidth={2} />
+      <circle cx={cxB} cy={cy} r={rB} fill={SIDE_COLORS.theirs} fillOpacity={0.22} stroke={SIDE_COLORS.theirs} strokeWidth={2} />
+      {shared > 0 && <circle cx={cxB} cy={cy} r={rB} fill={SIDE_COLORS.both} fillOpacity={0.18} clipPath={`url(#${clipId})`} />}
 
       <text x={labelA} y={cy + 6} fontSize="22" fontWeight="700" {...text}>{onlyA}</text>
       <text x={labelB} y={cy + 6} fontSize="22" fontWeight="700" {...text}>{onlyB}</text>

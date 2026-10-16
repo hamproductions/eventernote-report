@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Portal } from "@ark-ui/react/portal";
-import { Download, Ellipsis, LogOut, Moon, ReceiptText, RefreshCw, Sun, Users } from "lucide-react";
+import { Download, Ellipsis, LogOut, Moon, Network, ReceiptText, RefreshCw, Sun, Users } from "lucide-react";
+import { navigate } from "vike/client/router";
 import { HStack, VStack, Box, styled } from "styled-system/jsx";
 import { css } from "styled-system/css";
 import { Button } from "~/components/ui/button";
@@ -170,6 +171,9 @@ export function DashboardHeader({
             <Button size="sm" variant="outline" onClick={onOpenCompare} hideBelow="md">
               <Users /> Compare
             </Button>
+            <Button size="sm" variant="outline" hideBelow="md" asChild>
+              <a href={`/connections?user=${encodeURIComponent(userId)}`}><Network /> Connections</a>
+            </Button>
             <Button size="sm" variant="outline" onClick={onExportStats} hideBelow="lg">
               <Download /> Save image
             </Button>
@@ -188,6 +192,7 @@ export function DashboardHeader({
               positioning={{ placement: "bottom-end" }}
               onSelect={(details) => {
                 if (details.value === "compare") onOpenCompare();
+                if (details.value === "connections") navigate(`/connections?user=${encodeURIComponent(userId)}`);
                 if (details.value === "save") onExportStats();
                 if (details.value === "reload") onRefresh();
                 if (details.value === "theme") onToggleColorMode();
@@ -203,6 +208,7 @@ export function DashboardHeader({
                 <Menu.Positioner>
                   <Menu.Content minW="52">
                     <Menu.Item gap="2" value="compare" hideFrom="md"><Users /> Compare with someone</Menu.Item>
+                    <Menu.Item gap="2" value="connections" hideFrom="md"><Network /> Artist connections</Menu.Item>
                     <Menu.Item gap="2" value="save"><Download /> Save image</Menu.Item>
                     <Menu.Item gap="2" value="reload" hideFrom="md" disabled={refreshing}><RefreshCw /> Reload from Eventernote</Menu.Item>
                     <Menu.Item gap="2" value="theme" hideFrom="md">{colorMode === "dark" ? <Sun /> : <Moon />} {colorMode === "dark" ? "Light mode" : "Dark mode"}</Menu.Item>

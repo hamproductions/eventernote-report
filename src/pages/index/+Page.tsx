@@ -35,6 +35,7 @@ import { ReportSection } from '~/components/dashboard/ReportSection';
 import { ReceiptPanel } from '~/components/receipt/ReceiptPanel';
 import { PeopleDrawer, type PeopleTab } from '~/components/dashboard/PeopleDrawer';
 import { CompareDrawer } from '~/components/dashboard/CompareDrawer';
+import { ConnectionsSection } from '~/components/connections/ConnectionsSection';
 import { ShareImageDrawer } from '~/components/share/ShareImageDrawer';
 import type { PosterData } from '~/components/share/SharePoster';
 
@@ -825,6 +826,10 @@ export default function Page() {
                     getVenuesViewLabel={getVenuesViewLabel}
                   />
                 )}
+              </ReportSection>
+
+              <ReportSection id="connections" title="Connections" description="Who performs together: closer means more shared stages. Compare with someone to see how much your genba overlap">
+                <ConnectionsSection key={userId} userId={userId} userLabel={profileName || userId} events={filteredEvents} range={dateRangeKey} recentUsers={recentUsers} />
               </ReportSection>
 
               {chartAnalytics && (

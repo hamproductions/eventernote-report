@@ -23,6 +23,7 @@ export const DASHBOARD_SECTIONS = [
   ["overview", "Overview", "Overview"],
   ["activity", "Activity", "Activity"],
   ["artists", "Artists & venues", "Artists"],
+  ["connections", "Connections", "Links"],
   ["events", "Events", "Events"]
 ] as const;
 

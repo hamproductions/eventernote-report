@@ -5,5 +5,5 @@ export const SIDE_COLORS = {
   both: 'var(--colors-fg-default)'
 } as const;
 
-export const NODE_COLOR = 'var(--colors-gray-8)';
+export const NODE_COLOR = 'var(--colors-fg-subtle)';
 export const ACCENT = 'var(--colors-blue-9)';

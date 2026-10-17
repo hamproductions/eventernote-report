@@ -229,7 +229,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
   const ready = points.length === graph.nodes.length;
 
   return (
-    <Box ref={wrapRef} position="relative" w="full" h={{ base: "420px", md: "600px" }} borderWidth="1px" borderColor="border.default" borderRadius="lg" bg="bg.subtle" overflow="hidden" touchAction="none">
+    <Box ref={wrapRef} position="relative" w="full" h={{ base: "340px", md: "440px" }} borderWidth="1px" borderColor="border.default" borderRadius="lg" bg="bg.subtle" overflow="hidden" touchAction="none">
       <svg
         ref={svgRef}
         width={size.w}

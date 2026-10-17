@@ -5,6 +5,8 @@ export interface SimNode {
   vx: number;
   vy: number;
   r: number;
+  /** Cluster id, -1 when ungrouped */
+  group: number;
   /** Set while dragging */
   fx: number | null;
   fy: number | null;
@@ -29,12 +31,31 @@ export class ForceSim {
   links: SimLink[];
   alpha = 1;
 
-  constructor(nodes: { id: string; r: number }[], links: SimLink[]) {
-    // Biggest nodes start near the middle on a golden-angle spiral, so layouts are repeatable
+  constructor(nodes: { id: string; r: number; group?: number }[], links: SimLink[]) {
+    // Groups start on a ring and spread out from there, ungrouped artists in the middle; no randomness so layouts repeat
+    const groupCount = Math.max(0, ...nodes.map((node) => (node.group ?? -1) + 1));
+    const ring = 70 + groupCount * 28;
+    const seen = new Map<number, number>();
     this.nodes = nodes.map((node, i) => {
-      const angle = i * 2.399963;
-      const radius = 24 * Math.sqrt(i + 0.5);
-      return { id: node.id, r: node.r, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, fx: null, fy: null };
+      const group = node.group ?? -1;
+      const rank = seen.get(group) ?? 0;
+      seen.set(group, rank + 1);
+      const spiralAngle = rank * 2.399963;
+      const spiralRadius = 18 * Math.sqrt(rank + 0.5);
+      const centreAngle = group >= 0 ? (group / groupCount) * Math.PI * 2 : 0;
+      const cx = group >= 0 ? Math.cos(centreAngle) * ring : 0;
+      const cy = group >= 0 ? Math.sin(centreAngle) * ring : 0;
+      return {
+        id: node.id,
+        r: node.r,
+        group,
+        x: cx + Math.cos(spiralAngle + i) * spiralRadius,
+        y: cy + Math.sin(spiralAngle + i) * spiralRadius,
+        vx: 0,
+        vy: 0,
+        fx: null,
+        fy: null
+      };
     });
     this.links = links;
   }
@@ -64,7 +85,8 @@ export class ForceSim {
           d2 = dx * dx + dy * dy;
         }
         const d = Math.sqrt(d2);
-        const push = (2600 * alpha) / Math.max(d2, 400);
+        const apart = a.group !== b.group || a.group < 0 ? 2.4 : 1;
+        const push = (2600 * apart * alpha) / Math.max(d2, 400);
         const fx = (dx / d) * push;
         const fy = (dy / d) * push;
         a.vx -= fx;
@@ -96,6 +118,24 @@ export class ForceSim {
       a.vy += dy * pull;
       b.vx -= dx * pull;
       b.vy -= dy * pull;
+    }
+
+    // Pull each group toward its own centre so groups read as separate clumps
+    const centres = new Map<number, { x: number; y: number; n: number }>();
+    for (const node of nodes) {
+      if (node.group < 0) continue;
+      const c = centres.get(node.group) ?? { x: 0, y: 0, n: 0 };
+      c.x += node.x;
+      c.y += node.y;
+      c.n += 1;
+      centres.set(node.group, c);
+    }
+    for (const node of nodes) {
+      const c = node.group >= 0 ? centres.get(node.group) : undefined;
+      if (c && c.n > 1) {
+        node.vx += (c.x / c.n - node.x) * 0.12 * alpha;
+        node.vy += (c.y / c.n - node.y) * 0.12 * alpha;
+      }
     }
 
     for (const node of nodes) {

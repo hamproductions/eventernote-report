@@ -19,7 +19,28 @@ interface ForceGraphProps {
 }
 
 const radiusOf = (count: number) => 5 + Math.sqrt(count) * 3.2;
-const MAX_LABELS = 22;
+const MAX_LABELS = 12;
+const BACKBONE_LINKS_PER_NODE = 3;
+const HULL_PAD = 18;
+
+type Point = { x: number; y: number };
+
+/** Convex hull (monotone chain); returns the points themselves when there are fewer than three. */
+function convexHull(points: Point[]) {
+  if (points.length < 3) return points;
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const build = (list: Point[]) => {
+    const out: Point[] = [];
+    for (const point of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], point) <= 0) out.pop();
+      out.push(point);
+    }
+    out.pop();
+    return out;
+  };
+  return [...build(sorted), ...build([...sorted].reverse())];
+}
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -89,7 +110,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
   // Rebuild the layout whenever the data changes
   useEffect(() => {
     const sim = new ForceSim(
-      graph.nodes.map((node) => ({ id: node.id, r: radiusOf(node.count) })),
+      graph.nodes.map((node) => ({ id: node.id, r: radiusOf(node.count), group: node.cluster })),
       graph.links.map((link) => ({ source: index.get(link.a)!, target: index.get(link.b)!, strength: link.strength }))
     );
     simRef.current = sim;
@@ -215,7 +236,41 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
     return !active || id === active || !!neighbours?.has(id);
   };
 
-  const topLabels = useMemo(() => new Set(graph.nodes.slice(0, MAX_LABELS).map((node) => node.id)), [graph]);
+  // Label the biggest artists and each group's biggest artist; the rest show on hover or zoom
+  const topLabels = useMemo(() => {
+    const ids = new Set(graph.nodes.slice(0, MAX_LABELS).map((node) => node.id));
+    for (const cluster of graph.clusters) ids.add(cluster.members[0]);
+    return ids;
+  }, [graph]);
+
+  // Only each artist's strongest few links are always drawn; the rest appear when you pick an artist or group
+  const backbone = useMemo(() => {
+    const keep = new Set<string>();
+    const perNode = new Map<string, typeof graph.links>();
+    for (const link of graph.links) {
+      for (const id of [link.a, link.b]) perNode.set(id, [...(perNode.get(id) ?? []), link]);
+    }
+    for (const links of perNode.values()) {
+      links
+        .sort((x, y) => y.weight * y.strength - x.weight * x.strength)
+        .slice(0, BACKBONE_LINKS_PER_NODE)
+        .forEach((link) => keep.add(`${link.a}|${link.b}`));
+    }
+    return keep;
+  }, [graph]);
+
+  const hulls = useMemo(() => {
+    if (points.length !== graph.nodes.length) return [];
+    return graph.clusters
+      .filter((cluster) => cluster.members.length >= 2)
+      .map((cluster) => {
+        const members = cluster.members.map((id) => points[index.get(id)!]);
+        const hull = convexHull(members);
+        const top = Math.min(...members.map((point) => point.y));
+        const x = members.reduce((sum, point) => sum + point.x, 0) / members.length;
+        return { id: cluster.id, path: `M${hull.map((point) => `${point.x} ${point.y}`).join("L")}Z`, labelX: x, labelY: top - HULL_PAD - 6, name: cluster.members.slice(0, 2).join(" · ") };
+      });
+  }, [graph, points, index]);
 
   const fillFor = (node: ArtistGraph["nodes"][number]) => {
     if (comparing) return node.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
@@ -244,11 +299,26 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
         onPointerCancel={onUp}
       >
         <g transform={`translate(${size.w / 2 + view.x} ${size.h / 2 + view.y}) scale(${view.k})`}>
+          {hulls.map((hull) => {
+            const lit = highlightCluster === hull.id || (active !== null && graph.nodes[index.get(active)!]?.cluster === hull.id);
+            return (
+              <g key={hull.id} pointerEvents="none">
+                <path d={hull.path} fill={lit ? ACCENT : "var(--colors-fg-muted)"} stroke={lit ? ACCENT : "var(--colors-fg-muted)"} strokeWidth={HULL_PAD * 2} strokeLinejoin="round" opacity={lit ? 0.16 : 0.07} />
+                {hull.id < 5 && (
+                  <text x={hull.labelX} y={hull.labelY} textAnchor="middle" fontSize={10 / Math.sqrt(view.k)} fill="var(--colors-fg-muted)" opacity={highlightCluster !== null && !lit ? 0.2 : 0.9}>{hull.name}</text>
+                )}
+              </g>
+            );
+          })}
           {ready &&
             graph.links.map((link) => {
+              const key = `${link.a}|${link.b}`;
+              const touchesActive = !!active && (link.a === active || link.b === active);
+              const inHighlight = highlightCluster !== null && inCluster(link.a) && inCluster(link.b);
+              if (!backbone.has(key) && !touchesActive && !inHighlight) return null;
               const a = points[index.get(link.a)!];
               const b = points[index.get(link.b)!];
-              const lit = isLit(link.a) && isLit(link.b) && (!active || highlightCluster !== null || link.a === active || link.b === active);
+              const lit = isLit(link.a) && isLit(link.b) && (!active || highlightCluster !== null || touchesActive);
               const dimmed = (active || highlightCluster !== null) && !lit;
               return (
                 <line
@@ -259,8 +329,9 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
                   y2={b.y}
                   stroke={linkColor(link)}
                   strokeLinecap="round"
-                  strokeWidth={(0.8 + Math.min(link.weight, 8) * 0.55) / Math.sqrt(view.k)}
-                  opacity={dimmed ? 0.05 : active && lit ? 0.85 : 0.18 + link.strength * 0.5}
+                  strokeDasharray={graph.nodes[index.get(link.a)!].cluster !== graph.nodes[index.get(link.b)!].cluster ? "3 4" : undefined}
+                  strokeWidth={(0.8 + Math.min(link.weight, 8) * 0.45) / Math.sqrt(view.k)}
+                  opacity={dimmed ? 0.05 : active && lit ? 0.85 : 0.14 + link.strength * 0.4}
                 />
               );
             })}

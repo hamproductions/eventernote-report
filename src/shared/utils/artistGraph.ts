@@ -32,6 +32,8 @@ export interface ArtistNode {
   both: number;
   /** -1 when the artist is not part of any group */
   cluster: number;
+  /** Mini group inside the cluster, -1 when none */
+  sub: number;
   degree: number;
 }
 
@@ -46,11 +48,22 @@ export interface ArtistLink {
   strength: number;
 }
 
+export type ClusterTrend = 'recent' | 'steady' | 'earlier';
+
 export interface ArtistCluster {
   id: number;
+  /** Most-seen first */
   members: string[];
   /** Total appearances of the members */
   weight: number;
+  /** Distinct events featuring any member */
+  events: number;
+  first: string;
+  last: string;
+  /** recent = mostly in the later part of the range, earlier = nothing lately */
+  trend: ClusterTrend;
+  /** Tighter groups inside this one, each with at least two members */
+  subgroups: string[][];
 }
 
 export interface ArtistGraph {
@@ -89,6 +102,7 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
   for (const [href, event] of theirs) if (!union.has(href)) union.set(href, { event, mine: false, theirs: true });
 
   const stats = new Map<string, { count: number; mine: number; theirs: number; both: number }>();
+  const appearances = new Map<string, { href: string; date: string }[]>();
   const pairs = new Map<string, { a: string; b: string; weight: number; mine: number; theirs: number }>();
   let pairEvents = 0;
   let skippedEvents = 0;
@@ -102,6 +116,12 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
       if (inTheirs) stat.theirs += 1;
       if (inMine && inTheirs) stat.both += 1;
       stats.set(artist, stat);
+      // Festival-size line-ups would make every group look active all year
+      if (artists.length <= options.maxArtistsPerEvent) {
+        const seen = appearances.get(artist) ?? [];
+        seen.push({ href: event.href, date: event.date.slice(0, 10) });
+        appearances.set(artist, seen);
+      }
     }
     if (artists.length < 2) continue;
     if (artists.length > options.maxArtistsPerEvent) {
@@ -159,58 +179,148 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
     id: name,
     ...stat,
     cluster: -1,
+    sub: -1,
     degree: degree.get(name) ?? 0
   }));
-  const clusters = assignClusters(nodes, links);
+  const clusters = assignClusters(nodes, links, appearances);
   return { nodes, links, clusters, pairEvents, skippedEvents };
 }
 
-/** Weighted label propagation, deterministic so the same data always gives the same groups. */
-function assignClusters(nodes: ArtistNode[], links: ArtistLink[]): ArtistCluster[] {
-  const index = new Map(nodes.map((node, i) => [node.id, i]));
-  const adjacency: [number, number][][] = nodes.map(() => []);
-  for (const link of links) {
-    const a = index.get(link.a)!;
-    const b = index.get(link.b)!;
-    adjacency[a].push([b, link.strength * link.weight]);
-    adjacency[b].push([a, link.strength * link.weight]);
-  }
-  const label = nodes.map((_, i) => i);
-  for (let round = 0; round < 30; round++) {
-    let changed = false;
-    for (let i = 0; i < nodes.length; i++) {
-      if (!adjacency[i].length) continue;
-      const scores = new Map<number, number>();
-      for (const [j, w] of adjacency[i]) scores.set(label[j], (scores.get(label[j]) ?? 0) + w);
-      let best = label[i];
-      let bestScore = scores.get(best) ?? -1;
-      for (const [candidate, score] of scores) {
-        if (score > bestScore + 1e-9 || (Math.abs(score - bestScore) <= 1e-9 && candidate < best)) {
-          best = candidate;
-          bestScore = score;
-        }
-      }
-      if (best !== label[i]) {
-        label[i] = best;
-        changed = true;
+const dayMs = 86400000;
+const daysBetween = (from: string, to: string) => (Date.parse(to) - Date.parse(from)) / dayMs;
+const median = (sorted: string[]) => sorted[Math.floor(sorted.length / 2)];
+
+/**
+ * Louvain modularity optimisation: repeatedly moves nodes to the neighbouring community
+ * that improves modularity most, then merges communities and repeats. Deterministic.
+ * Higher `resolution` gives smaller communities.
+ */
+export function louvain(n: number, edges: [number, number, number][], resolution = 1): number[] {
+  let mapping = Array.from({ length: n }, (_, i) => i);
+  let size = n;
+  let current = edges;
+  for (let level = 0; level < 10; level++) {
+    const adjacency: [number, number][][] = Array.from({ length: size }, () => []);
+    const self = new Array<number>(size).fill(0);
+    for (const [a, b, w] of current) {
+      if (a === b) self[a] += w;
+      else {
+        adjacency[a].push([b, w]);
+        adjacency[b].push([a, w]);
       }
     }
-    if (!changed) break;
-  }
+    const k = adjacency.map((list, i) => list.reduce((sum, [, w]) => sum + w, 0) + 2 * self[i]);
+    const twoM = k.reduce((sum, value) => sum + value, 0);
+    if (!twoM) break;
 
+    const community = Array.from({ length: size }, (_, i) => i);
+    const total = [...k];
+    let improved = false;
+    for (let pass = 0; pass < 25; pass++) {
+      let moved = false;
+      for (let i = 0; i < size; i++) {
+        const weights = new Map<number, number>();
+        for (const [j, w] of adjacency[i]) weights.set(community[j], (weights.get(community[j]) ?? 0) + w);
+        const own = community[i];
+        total[own] -= k[i];
+        let best = own;
+        let bestGain = (weights.get(own) ?? 0) - (resolution * total[own] * k[i]) / twoM;
+        for (const [candidate, w] of weights) {
+          const gain = w - (resolution * total[candidate] * k[i]) / twoM;
+          if (gain > bestGain + 1e-12) {
+            best = candidate;
+            bestGain = gain;
+          }
+        }
+        total[best] += k[i];
+        if (best !== own) {
+          community[i] = best;
+          moved = true;
+          improved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    if (!improved) break;
+
+    const ids = new Map<number, number>();
+    for (const c of community) if (!ids.has(c)) ids.set(c, ids.size);
+    mapping = mapping.map((m) => ids.get(community[m])!);
+    const merged = new Map<string, [number, number, number]>();
+    for (const [a, b, w] of current) {
+      const ca = ids.get(community[a])!;
+      const cb = ids.get(community[b])!;
+      const key = ca < cb ? `${ca}:${cb}` : `${cb}:${ca}`;
+      const entry = merged.get(key) ?? [Math.min(ca, cb), Math.max(ca, cb), 0];
+      entry[2] += w;
+      merged.set(key, entry);
+    }
+    size = ids.size;
+    current = [...merged.values()];
+  }
+  return mapping;
+}
+
+function groupsOf(labels: number[], minSize: number) {
   const groups = new Map<number, number[]>();
-  label.forEach((value, i) => groups.set(value, [...(groups.get(value) ?? []), i]));
-  const ordered = [...groups.values()]
-    .filter((members) => members.length > 1)
+  labels.forEach((label, i) => groups.set(label, [...(groups.get(label) ?? []), i]));
+  return [...groups.values()].filter((members) => members.length >= minSize);
+}
+
+function assignClusters(nodes: ArtistNode[], links: ArtistLink[], appearances: Map<string, { href: string; date: string }[]>): ArtistCluster[] {
+  const index = new Map(nodes.map((node, i) => [node.id, i]));
+  const edges: [number, number, number][] = links.map((link) => [index.get(link.a)!, index.get(link.b)!, link.weight]);
+  const labels = louvain(nodes.length, edges);
+  const ordered = groupsOf(labels, 2)
     .map((members) => ({ members, weight: members.reduce((sum, i) => sum + nodes[i].count, 0) }))
     .sort((x, y) => y.members.length - x.members.length || y.weight - x.weight);
-  const clusters: ArtistCluster[] = ordered.map(({ members, weight }, id) => {
+
+  // Overall timeline, to tell which groups are active now and which were an earlier phase
+  const allDates = new Map<string, string>();
+  for (const node of nodes) for (const { href, date } of appearances.get(node.id) ?? []) allDates.set(href, date);
+  const overall = [...allDates.values()].sort();
+  const overallLast = overall[overall.length - 1] ?? '';
+  const overallMedian = overall.length ? median(overall) : '';
+
+  return ordered.map(({ members, weight }, id) => {
+    const memberSet = new Set(members);
+    const ids = members.map((i) => nodes[i].id);
+    const eventDates = new Map<string, string>();
+    for (const i of members) for (const { href, date } of appearances.get(nodes[i].id) ?? []) eventDates.set(href, date);
+    const dates = [...eventDates.values()].sort();
+    const last = dates[dates.length - 1] ?? '';
+    let trend: ClusterTrend = 'steady';
+    if (last && overallLast && daysBetween(last, overallLast) > 180) trend = 'earlier';
+    else if (dates.length >= 3 && overallMedian && daysBetween(overallMedian, median(dates)) > 45) trend = 'recent';
+
+    // Tighter pockets inside bigger groups
+    const subgroups: string[][] = [];
+    if (members.length >= 6) {
+      const local = new Map(members.map((node, i) => [node, i]));
+      const localEdges: [number, number, number][] = [];
+      for (const [a, b, w] of edges) if (memberSet.has(a) && memberSet.has(b)) localEdges.push([local.get(a)!, local.get(b)!, w]);
+      const found = groupsOf(louvain(members.length, localEdges, 1.6), 2);
+      if (found.length >= 2) {
+        found
+          .sort((x, y) => y.length - x.length)
+          .forEach((group, subId) => {
+            const names = group.map((i) => nodes[members[i]]).sort((x, y) => y.count - x.count || x.id.localeCompare(y.id));
+            names.forEach((node) => (node.sub = subId));
+            subgroups.push(names.map((node) => node.id));
+          });
+      }
+    }
+
     for (const i of members) nodes[i].cluster = id;
     return {
       id,
       weight,
-      members: members.map((i) => nodes[i]).sort((x, y) => y.count - x.count || x.id.localeCompare(y.id)).map((node) => node.id)
+      members: ids.sort((x, y) => nodes[index.get(y)!].count - nodes[index.get(x)!].count || x.localeCompare(y)),
+      events: eventDates.size,
+      first: dates[0] ?? '',
+      last,
+      trend,
+      subgroups
     };
   });
-  return clusters;
 }

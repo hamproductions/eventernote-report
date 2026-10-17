@@ -34,6 +34,20 @@ const MEMBERSHIPS = [
   ["theirs", "Only them"]
 ] as const;
 
+const TREND_LABEL = { recent: "Recent", steady: "Steady", earlier: "Earlier" } as const;
+
+function period(first: string, last: string) {
+  const a = first.slice(0, 7);
+  const b = last.slice(0, 7);
+  return a === b ? a : `${a} to ${b}`;
+}
+
+function MemberChip({ name, onPick }: { name: string; onPick: (id: string) => void }) {
+  return (
+    <styled.button type="button" onClick={() => onPick(name)} fontSize="xs" px="2" py="0.5" minH={{ base: "8", md: "auto" }} borderWidth="1px" borderColor="border.subtle" borderRadius="full" cursor="pointer" _hover={{ bg: "bg.muted" }}>{name}</styled.button>
+  );
+}
+
 const field = css({ h: { base: "11", md: "8" }, px: "3", borderWidth: "1px", borderColor: "border.control", borderRadius: "md", bg: "bg.default", color: "fg.default", fontSize: "sm" });
 
 function Slider({ label, value, min, max, step = 1, onChange, hint }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void; hint: string }) {
@@ -198,7 +212,7 @@ export function ConnectionsSection({ userId, userLabel, events, range, recentUse
               <>
                 <HStack gap="1">
                   <PillGroup label="List" value={tab} options={[["pairs", "Closest pairs"], ["groups", "Groups"]]} onChange={setTab} />
-                  <InfoTip label="these lists">{tab === "pairs" ? "Times they shared a stage, and how often they appear together when either appears." : "Artists who keep turning up together. Hover a group to light it up on the graph."}</InfoTip>
+                  <InfoTip label="these lists">{tab === "pairs" ? "Times they shared a stage, and how often they appear together when either appears." : "Found from who keeps performing together. Indented rows are tighter mini groups inside a bigger group. Recent means its events lean toward the end of the range, Earlier means nothing lately. Hover a group to light it up."}</InfoTip>
                 </HStack>
                 {tab === "pairs" ? (
                   <VStack gap="0" alignItems="stretch">
@@ -213,16 +227,32 @@ export function ConnectionsSection({ userId, userLabel, events, range, recentUse
                   <VStack gap="1" alignItems="stretch">
                     {!graph.clusters.length && <Text size="sm" color="fg.muted">No groups yet.</Text>}
                     {graph.clusters.slice(0, 8).map((cluster) => (
-                      <Box key={cluster.id} p="2" borderRadius="md" _hover={{ bg: "bg.subtle" }}
+                      <VStack key={cluster.id} gap="1.5" alignItems="stretch" p="2" borderRadius="md" _hover={{ bg: "bg.subtle" }}
                         onPointerEnter={() => setHighlightCluster(cluster.id)} onPointerLeave={() => setHighlightCluster(null)}
                         onFocus={() => setHighlightCluster(cluster.id)} onBlur={() => setHighlightCluster(null)}>
-                        <HStack gap="1" flexWrap="wrap">
-                          {cluster.members.slice(0, 5).map((member) => (
-                            <styled.button key={member} type="button" onClick={() => pick(member)} fontSize="xs" px="2" py="0.5" minH={{ base: "8", md: "auto" }} borderWidth="1px" borderColor="border.subtle" borderRadius="full" cursor="pointer" _hover={{ bg: "bg.muted" }}>{member}</styled.button>
-                          ))}
-                          {cluster.members.length > 5 && <Text size="xs" color="fg.muted">+{cluster.members.length - 5}</Text>}
+                        <HStack justifyContent="space-between" gap="2" alignItems="baseline">
+                          <Text size="sm" fontWeight="medium" truncate>{cluster.members.slice(0, 2).join(" · ")}{cluster.members.length > 2 && ` +${cluster.members.length - 2}`}</Text>
+                          <Text size="xs" whiteSpace="nowrap" color={cluster.trend === "recent" ? "colorPalette.text" : "fg.muted"} fontWeight={cluster.trend === "recent" ? "medium" : "normal"}>
+                            {TREND_LABEL[cluster.trend]}
+                          </Text>
                         </HStack>
-                      </Box>
+                        <Text size="xs" color="fg.muted">{cluster.events} events · {period(cluster.first, cluster.last)}</Text>
+                        {cluster.subgroups.length > 0 ? (
+                          <VStack gap="1" alignItems="stretch">
+                            {cluster.subgroups.map((group, i) => (
+                              <HStack key={i} gap="1" flexWrap="wrap" pl="2" borderLeftWidth="2px" borderColor="border.default">
+                                {group.slice(0, 4).map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
+                                {group.length > 4 && <Text size="xs" color="fg.muted">+{group.length - 4}</Text>}
+                              </HStack>
+                            ))}
+                          </VStack>
+                        ) : (
+                          <HStack gap="1" flexWrap="wrap">
+                            {cluster.members.slice(0, 5).map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
+                            {cluster.members.length > 5 && <Text size="xs" color="fg.muted">+{cluster.members.length - 5}</Text>}
+                          </HStack>
+                        )}
+                      </VStack>
                     ))}
                   </VStack>
                 )}

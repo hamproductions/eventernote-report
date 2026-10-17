@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildArtistGraph, DEFAULT_GRAPH_OPTIONS, type GraphEvent } from '../artistGraph';
+import { buildArtistGraph, DEFAULT_GRAPH_OPTIONS, louvain, type GraphEvent } from '../artistGraph';
 import { ForceSim } from '../forceLayout';
 import { computeOverlap } from '../overlap';
 import { lensArea, layoutVenn } from '../venn';
@@ -100,5 +100,87 @@ describe('layoutVenn', () => {
     expect(apart.d).toBeGreaterThan(apart.rA + apart.rB);
     const nested = layoutVenn(100, 10, 10, 100);
     expect(nested.d).toBeCloseTo(nested.rA - nested.rB, 3);
+  });
+});
+
+describe('louvain', () => {
+  it('splits two cliques joined by one weak edge', () => {
+    const edges: [number, number, number][] = [
+      [0, 1, 5], [0, 2, 5], [1, 2, 5],
+      [3, 4, 5], [3, 5, 5], [4, 5, 5],
+      [2, 3, 1]
+    ];
+    const labels = louvain(6, edges);
+    expect(labels[0]).toBe(labels[1]);
+    expect(labels[1]).toBe(labels[2]);
+    expect(labels[3]).toBe(labels[4]);
+    expect(labels[0]).not.toBe(labels[3]);
+  });
+
+  it('returns each node alone when there are no edges', () => {
+    expect(louvain(3, [])).toEqual([0, 1, 2]);
+  });
+});
+
+describe('cluster trends and mini groups', () => {
+  it('flags a group that stopped as earlier and one that started late as recent', () => {
+    const events = [
+      ...[1, 2, 3, 4].map((m) => ev(['Old A', 'Old B'], `2025-0${m}-10`)),
+      ...[1, 2, 3, 4, 5, 6].map((m) => ev(['Mid A', 'Mid B'], `2025-0${m}-20`)),
+      ...[6, 7, 8, 9].map((m) => ev(['New A', 'New B'], `2025-0${m}-15`)),
+      ev(['New A', 'New B'], '2026-03-15'),
+      ev(['New A', 'New B'], '2026-04-15'),
+      ev(['New A', 'New B'], '2026-05-15')
+    ];
+    const graph = buildArtistGraph(events, null, DEFAULT_GRAPH_OPTIONS);
+    const trendOf = (name: string) => graph.clusters.find((c) => c.members.includes(name))!.trend;
+    expect(trendOf('Old A')).toBe('earlier');
+    expect(trendOf('New A')).toBe('recent');
+    const old = graph.clusters.find((c) => c.members.includes('Old A'))!;
+    expect(old).toMatchObject({ events: 4, first: '2025-01-10', last: '2025-04-10' });
+  });
+
+  it('finds tighter pockets inside a big group', () => {
+    const unitA = ['A1', 'A2', 'A3'];
+    const unitB = ['B1', 'B2', 'B3'];
+    const events = [
+      ...Array.from({ length: 6 }, () => ev(unitA)),
+      ...Array.from({ length: 6 }, () => ev(unitB)),
+      ...Array.from({ length: 2 }, () => ev(['A1', 'B1']))
+    ];
+    const graph = buildArtistGraph(events, null, DEFAULT_GRAPH_OPTIONS);
+    expect(graph.clusters.length).toBeGreaterThanOrEqual(1);
+    const total = graph.clusters.flatMap((c) => c.subgroups.length ? c.subgroups : [c.members]);
+    const sets = total.map((group) => [...group].sort().join(','));
+    expect(sets).toContain('A1,A2,A3');
+    expect(sets).toContain('B1,B2,B3');
+  });
+});
+
+describe('ForceSim groups', () => {
+  it('keeps groups apart from each other', () => {
+    const events = [
+      ...Array.from({ length: 4 }, () => ev(['A', 'B', 'C'])),
+      ...Array.from({ length: 4 }, () => ev(['X', 'Y', 'Z'])),
+      ev(['C', 'X'])
+    ];
+    const graph = buildArtistGraph(events, null, DEFAULT_GRAPH_OPTIONS);
+    const index = new Map(graph.nodes.map((n, i) => [n.id, i]));
+    const sim = new ForceSim(
+      graph.nodes.map((n) => ({ id: n.id, r: 8, group: n.cluster })),
+      graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.strength }))
+    );
+    sim.run(600);
+    const centre = (names: string[]) => {
+      const pts = names.map((name) => sim.nodes[index.get(name)!]);
+      return { x: pts.reduce((a, p) => a + p.x, 0) / pts.length, y: pts.reduce((a, p) => a + p.y, 0) / pts.length };
+    };
+    const spread = (names: string[]) => {
+      const c = centre(names);
+      return Math.max(...names.map((name) => Math.hypot(sim.nodes[index.get(name)!].x - c.x, sim.nodes[index.get(name)!].y - c.y)));
+    };
+    const a = centre(['A', 'B', 'C']);
+    const b = centre(['X', 'Y', 'Z']);
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(spread(['A', 'B', 'C']) + spread(['X', 'Y', 'Z']));
   });
 });

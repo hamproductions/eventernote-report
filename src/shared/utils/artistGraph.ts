@@ -46,6 +46,8 @@ export interface ArtistLink {
   theirs: number;
   /** 0..1, how often the pair shows up together relative to either showing up at all */
   strength: number;
+  /** strength discounted for pairs seen together only once or twice; drives layout distance */
+  closeness: number;
 }
 
 export type ClusterTrend = 'recent' | 'steady' | 'earlier';
@@ -169,7 +171,8 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
     if (pair.weight < options.minTogether || !ids.has(pair.a) || !ids.has(pair.b)) continue;
     const countA = stats.get(pair.a)!.count;
     const countB = stats.get(pair.b)!.count;
-    links.push({ ...pair, strength: pair.weight / (countA + countB - pair.weight) });
+    const strength = pair.weight / (countA + countB - pair.weight);
+    links.push({ ...pair, strength, closeness: strength * (pair.weight / (pair.weight + 1)) });
     degree.set(pair.a, (degree.get(pair.a) ?? 0) + 1);
     degree.set(pair.b, (degree.get(pair.b) ?? 0) + 1);
   }

@@ -3,6 +3,7 @@ import { buildArtistGraph, DEFAULT_GRAPH_OPTIONS, louvain, type GraphEvent } fro
 import { ForceSim } from '../forceLayout';
 import { computeOverlap } from '../overlap';
 import { lensArea, layoutVenn } from '../venn';
+import { simulateAttendance } from './simulateAttendance';
 
 let id = 0;
 const ev = (artists: string[], date = '2026-01-01', place = 'Hall'): GraphEvent => ({ href: `/events/${++id}`, name: `e${id}`, date, place, artists });
@@ -61,7 +62,7 @@ describe('ForceSim', () => {
     const events = [ev(['A', 'B']), ev(['A', 'B']), ev(['A', 'B']), ev(['C', 'D']), ev(['C', 'D']), ev(['C', 'D']), ev(['B', 'C'])];
     const graph = buildArtistGraph(events, null, DEFAULT_GRAPH_OPTIONS);
     const index = new Map(graph.nodes.map((n, i) => [n.id, i]));
-    const sim = new ForceSim(graph.nodes.map((n) => ({ id: n.id, r: 8 })), graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.strength })));
+    const sim = new ForceSim(graph.nodes.map((n) => ({ id: n.id, r: 8 })), graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.closeness })));
     sim.run(600);
     const dist = (a: string, b: string) => {
       const p = sim.nodes[index.get(a)!];
@@ -168,7 +169,7 @@ describe('ForceSim groups', () => {
     const index = new Map(graph.nodes.map((n, i) => [n.id, i]));
     const sim = new ForceSim(
       graph.nodes.map((n) => ({ id: n.id, r: 8, group: n.cluster })),
-      graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.strength }))
+      graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.closeness }))
     );
     sim.run(600);
     const centre = (names: string[]) => {
@@ -183,4 +184,50 @@ describe('ForceSim groups', () => {
     const b = centre(['X', 'Y', 'Z']);
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(spread(['A', 'B', 'C']) + spread(['X', 'Y', 'Z']));
   });
+});
+
+describe('layout on simulated fan seasons', () => {
+  for (const seed of [1, 2, 3]) {
+    it(`puts togetherness on the map (seed ${seed})`, () => {
+      const { events, truth } = simulateAttendance({ seed, events: 200 });
+      const graph = buildArtistGraph(events, null, { ...DEFAULT_GRAPH_OPTIONS, maxNodes: 80 });
+      const index = new Map(graph.nodes.map((n, i) => [n.id, i]));
+      const sim = new ForceSim(
+        graph.nodes.map((n) => ({ id: n.id, r: 5 + Math.sqrt(n.count) * 3.2, group: n.cluster })),
+        graph.links.map((l) => ({ source: index.get(l.a)!, target: index.get(l.b)!, strength: l.closeness }))
+      );
+      sim.run(1500);
+      const dist = (a: string, b: string) => {
+        const p = sim.nodes[index.get(a)!];
+        const q = sim.nodes[index.get(b)!];
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      };
+      const ids = graph.nodes.map((n) => n.id);
+      const sums = { unit: [0, 0], franchise: [0, 0], other: [0, 0] };
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const key = truth.unit.get(ids[i]) === truth.unit.get(ids[j]) ? 'unit' : truth.franchise.get(ids[i]) === truth.franchise.get(ids[j]) ? 'franchise' : 'other';
+          sums[key][0] += dist(ids[i], ids[j]);
+          sums[key][1] += 1;
+        }
+      }
+      const mean = (key: keyof typeof sums) => sums[key][0] / sums[key][1];
+      // Same unit closer than same franchise, closer than strangers
+      expect(mean('unit')).toBeLessThan(mean('franchise') * 0.8);
+      expect(mean('franchise')).toBeLessThan(mean('other') * 0.8);
+
+      // An artist's most frequent partner is among their nearest neighbours
+      let hit = 0;
+      let total = 0;
+      for (const node of graph.nodes) {
+        const partners = graph.links.filter((l) => l.a === node.id || l.b === node.id).sort((x, y) => y.weight - x.weight || y.strength - x.strength);
+        if (!partners.length) continue;
+        const top = partners[0].a === node.id ? partners[0].b : partners[0].a;
+        const nearest = ids.filter((o) => o !== node.id).sort((x, y) => dist(node.id, x) - dist(node.id, y)).slice(0, 3);
+        total += 1;
+        if (nearest.includes(top)) hit += 1;
+      }
+      expect(hit / total).toBeGreaterThan(0.7);
+    });
+  }
 });

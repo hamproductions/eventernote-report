@@ -111,10 +111,10 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
   useEffect(() => {
     const sim = new ForceSim(
       graph.nodes.map((node) => ({ id: node.id, r: radiusOf(node.count), group: node.cluster })),
-      graph.links.map((link) => ({ source: index.get(link.a)!, target: index.get(link.b)!, strength: link.strength }))
+      graph.links.map((link) => ({ source: index.get(link.a)!, target: index.get(link.b)!, strength: link.closeness }))
     );
     simRef.current = sim;
-    sim.run(prefersReducedMotion() ? 1000 : 220);
+    sim.run(prefersReducedMotion() ? 1500 : 500);
     publish();
     commitView({ x: 0, y: 0, k: 1 });
     if (!sim.settled) animate();

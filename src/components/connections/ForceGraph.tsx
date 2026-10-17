@@ -5,7 +5,7 @@ import { css } from "styled-system/css";
 import { IconButton } from "~/components/ui/icon-button";
 import type { ArtistGraph } from "~/shared/utils/artistGraph";
 import { ForceSim } from "~/shared/utils/forceLayout";
-import { ACCENT, NODE_COLOR, SIDE_COLORS } from "./palette";
+import { ACCENT, groupColor, SIDE_COLORS } from "./palette";
 
 interface ForceGraphProps {
   graph: ArtistGraph;
@@ -18,8 +18,7 @@ interface ForceGraphProps {
   centerOn: { id: string; nonce: number } | null;
 }
 
-const radiusOf = (count: number) => 5 + Math.sqrt(count) * 3.2;
-const MAX_LABELS = 12;
+const radiusOf = (active: number) => 4 + Math.sqrt(active) * 2.2;
 const BACKBONE_LINKS_PER_NODE = 3;
 const HULL_PAD = 18;
 
@@ -110,7 +109,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
   // Rebuild the layout whenever the data changes
   useEffect(() => {
     const sim = new ForceSim(
-      graph.nodes.map((node) => ({ id: node.id, r: radiusOf(node.count), group: node.cluster })),
+      graph.nodes.map((node) => ({ id: node.id, r: radiusOf(node.active), group: node.cluster })),
       graph.links.map((link) => ({ source: index.get(link.a)!, target: index.get(link.b)!, strength: link.closeness }))
     );
     simRef.current = sim;
@@ -135,7 +134,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
       minY = Math.min(minY, node.y - node.r);
       maxY = Math.max(maxY, node.y + node.r + 14);
     }
-    const pad = 48;
+    const pad = 72;
     const k = Math.min(2, Math.max(0.3, Math.min((size.w - pad * 2) / Math.max(maxX - minX, 1), (size.h - pad * 2) / Math.max(maxY - minY, 1))));
     commitView({ k, x: -((minX + maxX) / 2) * k, y: -((minY + maxY) / 2) * k });
   }, [size, commitView]);
@@ -236,12 +235,37 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
     return !active || id === active || !!neighbours?.has(id);
   };
 
-  // Label the biggest artists and each group's biggest artist; the rest show on hover or zoom
-  const topLabels = useMemo(() => {
-    const ids = new Set(graph.nodes.slice(0, MAX_LABELS).map((node) => node.id));
-    for (const cluster of graph.clusters) ids.add(cluster.members[0]);
-    return ids;
-  }, [graph]);
+  const placedLabels = useMemo(() => {
+    const shown = new Map<string, { x: number; y: number; anchor: "start" | "middle" | "end" }>();
+    if (points.length !== graph.nodes.length) return shown;
+    const fontSize = 12 / Math.sqrt(view.k);
+    type Box = { x0: number; y0: number; x1: number; y1: number };
+    const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+    const circles: Box[] = graph.nodes.map((node, i) => {
+      const r = radiusOf(node.active);
+      return { x0: points[i].x - r, y0: points[i].y - r, x1: points[i].x + r, y1: points[i].y + r };
+    });
+    const boxes: Box[] = [];
+    const order = graph.nodes.map((_, i) => i).sort((a, b) => graph.nodes[b].count - graph.nodes[a].count);
+    for (const i of order) {
+      const node = graph.nodes[i];
+      const r = radiusOf(node.active);
+      const { x, y } = points[i];
+      const width = [...node.id].reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 1 : 0.58), 0) * fontSize;
+      const height = fontSize * 1.15;
+      const spots = [
+        { x, y: y + r + fontSize, anchor: "middle" as const, box: { x0: x - width / 2, y0: y + r + 2, x1: x + width / 2, y1: y + r + 2 + height } },
+        { x, y: y - r - 4, anchor: "middle" as const, box: { x0: x - width / 2, y0: y - r - 4 - height, x1: x + width / 2, y1: y - r - 4 } },
+        { x: x + r + 4, y: y + fontSize / 3, anchor: "start" as const, box: { x0: x + r + 4, y0: y - height / 2, x1: x + r + 4 + width, y1: y + height / 2 } },
+        { x: x - r - 4, y: y + fontSize / 3, anchor: "end" as const, box: { x0: x - r - 4 - width, y0: y - height / 2, x1: x - r - 4, y1: y + height / 2 } }
+      ];
+      const clear = spots.find((spot) => !boxes.some((other) => overlaps(spot.box, other)) && !circles.some((circle, j) => j !== i && overlaps(spot.box, circle)));
+      const spot = clear ?? spots.find((candidate) => !boxes.some((other) => overlaps(candidate.box, other))) ?? spots[0];
+      boxes.push(spot.box);
+      shown.set(node.id, { x: spot.x - x, y: spot.y - y, anchor: spot.anchor });
+    }
+    return shown;
+  }, [graph, points, view.k]);
 
   // Only each artist's strongest few links are always drawn; the rest appear when you pick an artist or group
   const backbone = useMemo(() => {
@@ -268,13 +292,13 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
         const hull = convexHull(members);
         const top = Math.min(...members.map((point) => point.y));
         const x = members.reduce((sum, point) => sum + point.x, 0) / members.length;
-        return { id: cluster.id, path: `M${hull.map((point) => `${point.x} ${point.y}`).join("L")}Z`, labelX: x, labelY: top - HULL_PAD - 6, name: cluster.members.slice(0, 2).join(" · ") };
+        return { id: cluster.id, path: `M${hull.map((point) => `${point.x} ${point.y}`).join("L")}Z`, labelX: x, labelY: top - HULL_PAD - 6, name: cluster.members.length > 2 ? `${cluster.members[0]} +${cluster.members.length - 1}` : cluster.members.join(" · ") };
       });
   }, [graph, points, index]);
 
   const fillFor = (node: ArtistGraph["nodes"][number]) => {
     if (comparing) return node.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
-    return node.id === active || (highlightCluster !== null && node.cluster === highlightCluster) ? ACCENT : NODE_COLOR;
+    return groupColor(node.cluster);
   };
   const linkColor = (link: ArtistGraph["links"][number]) => {
     if (comparing) return link.mine && link.theirs ? SIDE_COLORS.both : link.mine ? SIDE_COLORS.mine : SIDE_COLORS.theirs;
@@ -284,7 +308,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
   const ready = points.length === graph.nodes.length;
 
   return (
-    <Box ref={wrapRef} position="relative" w="full" h={{ base: "340px", md: "440px" }} borderWidth="1px" borderColor="border.default" borderRadius="lg" bg="bg.subtle" overflow="hidden" touchAction="none">
+    <Box ref={wrapRef} position="relative" w="full" h={{ base: "420px", md: "620px" }} borderWidth="1px" borderColor="border.default" borderRadius="lg" bg="bg.subtle" overflow="hidden" touchAction="none">
       <svg
         ref={svgRef}
         width={size.w}
@@ -303,7 +327,7 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
             const lit = highlightCluster === hull.id || (active !== null && graph.nodes[index.get(active)!]?.cluster === hull.id);
             return (
               <g key={hull.id} pointerEvents="none">
-                <path d={hull.path} fill={lit ? ACCENT : "var(--colors-fg-muted)"} stroke={lit ? ACCENT : "var(--colors-fg-muted)"} strokeWidth={HULL_PAD * 2} strokeLinejoin="round" opacity={lit ? 0.16 : 0.07} />
+                <path d={hull.path} fill={groupColor(hull.id)} stroke={groupColor(hull.id)} strokeWidth={HULL_PAD * 2} strokeLinejoin="round" opacity={lit ? 0.26 : 0.13} />
                 {hull.id < 5 && (
                   <text x={hull.labelX} y={hull.labelY} textAnchor="middle" fontSize={10 / Math.sqrt(view.k)} fill="var(--colors-fg-muted)" opacity={highlightCluster !== null && !lit ? 0.2 : 0.9}>{hull.name}</text>
                 )}
@@ -338,15 +362,14 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
           {ready &&
             graph.nodes.map((node, i) => {
               const p = points[i];
-              const r = radiusOf(node.count);
+              const r = radiusOf(node.active);
               const lit = isLit(node.id);
               const split = comparing && node.mine > 0 && node.theirs > 0;
-              const showLabel = showLabels && (topLabels.has(node.id) || node.id === active || !!neighbours?.has(node.id) || view.k >= 1.8 || (highlightCluster !== null && inCluster(node.id)));
               return (
                 <g
                   key={node.id}
                   transform={`translate(${p.x} ${p.y})`}
-                  opacity={lit ? 1 : 0.14}
+                  opacity={lit ? (node.active ? 1 : 0.4) : 0.14}
                   onPointerDown={(event) => onNodeDown(event, i)}
                   onPointerEnter={() => setHovered(node.id)}
                   onPointerLeave={() => setHovered(null)}
@@ -374,21 +397,30 @@ export function ForceGraph({ graph, comparing, showLabels, selected, highlightCl
                     <circle r={r} fill={fillFor(node)} />
                   )}
                   <circle r={r} fill="none" stroke="var(--colors-bg-default)" strokeWidth={1.5} />
-                  {showLabel && (
-                    <text
-                      y={r + 12}
-                      textAnchor="middle"
-                      fontSize={11 / Math.sqrt(view.k)}
-                      fill="var(--colors-fg-default)"
-                      stroke="var(--colors-bg-subtle)"
-                      strokeWidth={3}
-                      paintOrder="stroke"
-                      pointerEvents="none"
-                    >
-                      {node.id}
-                    </text>
-                  )}
                 </g>
+              );
+            })}
+          {ready &&
+            graph.nodes.map((node, i) => {
+              const label = placedLabels.get(node.id) ?? { x: 0, y: radiusOf(node.active) + 14, anchor: "middle" as const };
+              const showLabel = showLabels && (placedLabels.has(node.id) || node.id === active || !!neighbours?.has(node.id) || (highlightCluster !== null && inCluster(node.id)));
+              if (!showLabel) return null;
+              return (
+                <text
+                  key={node.id}
+                  x={points[i].x + label.x}
+                  y={points[i].y + label.y}
+                  textAnchor={label.anchor}
+                  fontSize={12 / Math.sqrt(view.k)}
+                  fill="var(--colors-fg-default)"
+                  stroke="var(--colors-bg-subtle)"
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                  opacity={isLit(node.id) ? (node.active ? 1 : 0.5) : 0.14}
+                  pointerEvents="none"
+                >
+                  {node.id}
+                </text>
               );
             })}
         </g>

@@ -92,7 +92,12 @@ export function ConnectionsSection({ userId, userLabel, events, range, recentUse
   });
   const following = connections.data?.data.following.map((user) => user.userId) ?? [];
 
-  const graph = useMemo(() => buildArtistGraph(events, comparing ? them.events : null, options), [events, them.events, comparing, options]);
+  const history = useAttendedEvents(userId, { start: null, end: null });
+  const graph = useMemo(() => {
+    if (comparing) return buildArtistGraph(events, them.events, options);
+    if (!history.loaded) return buildArtistGraph(events, null, options);
+    return buildArtistGraph(history.events, null, options, new Set(events.map((event) => event.href)));
+  }, [events, them.events, comparing, options, history.loaded, history.events]);
   const overlap = useMemo(() => (comparing ? computeOverlap(events, them.events) : null), [events, them.events, comparing]);
   const merged = useMemo(() => {
     const byHref = new Map<string, { event: GraphEvent; mine: boolean; theirs: boolean }>();
@@ -226,12 +231,12 @@ export function ConnectionsSection({ userId, userLabel, events, range, recentUse
                 ) : (
                   <VStack gap="1" alignItems="stretch">
                     {!graph.clusters.length && <Text size="sm" color="fg.muted">No groups yet.</Text>}
-                    {graph.clusters.slice(0, 8).map((cluster) => (
+                    {graph.clusters.map((cluster) => (
                       <VStack key={cluster.id} gap="1.5" alignItems="stretch" p="2" borderRadius="md" _hover={{ bg: "bg.subtle" }}
                         onPointerEnter={() => setHighlightCluster(cluster.id)} onPointerLeave={() => setHighlightCluster(null)}
                         onFocus={() => setHighlightCluster(cluster.id)} onBlur={() => setHighlightCluster(null)}>
                         <HStack justifyContent="space-between" gap="2" alignItems="baseline">
-                          <Text size="sm" fontWeight="medium" truncate>{cluster.members.slice(0, 2).join(" · ")}{cluster.members.length > 2 && ` +${cluster.members.length - 2}`}</Text>
+                          <Text size="sm" fontWeight="medium" truncate>{cluster.members.length > 2 ? `${cluster.members[0]} +${cluster.members.length - 1}` : cluster.members.join(" · ")}</Text>
                           <Text size="xs" whiteSpace="nowrap" color={cluster.trend === "recent" ? "colorPalette.text" : "fg.muted"} fontWeight={cluster.trend === "recent" ? "medium" : "normal"}>
                             {TREND_LABEL[cluster.trend]}
                           </Text>
@@ -241,15 +246,13 @@ export function ConnectionsSection({ userId, userLabel, events, range, recentUse
                           <VStack gap="1" alignItems="stretch">
                             {cluster.subgroups.map((group, i) => (
                               <HStack key={i} gap="1" flexWrap="wrap" pl="2" borderLeftWidth="2px" borderColor="border.default">
-                                {group.slice(0, 4).map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
-                                {group.length > 4 && <Text size="xs" color="fg.muted">+{group.length - 4}</Text>}
+                                {group.map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
                               </HStack>
                             ))}
                           </VStack>
                         ) : (
                           <HStack gap="1" flexWrap="wrap">
-                            {cluster.members.slice(0, 5).map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
-                            {cluster.members.length > 5 && <Text size="xs" color="fg.muted">+{cluster.members.length - 5}</Text>}
+                            {cluster.members.map((member) => <MemberChip key={member} name={member} onPick={pick} />)}
                           </HStack>
                         )}
                       </VStack>

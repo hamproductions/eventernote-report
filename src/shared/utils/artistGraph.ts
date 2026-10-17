@@ -26,6 +26,8 @@ export interface ArtistNode {
   id: string;
   /** Distinct events (across both people in compare mode) */
   count: number;
+  /** Events inside the focus set; equals count when there is no focus */
+  active: number;
   mine: number;
   theirs: number;
   /** Events both people went to that featured this artist */
@@ -96,14 +98,14 @@ function dedupe(events: GraphEvent[]) {
 }
 
 /** Builds who-performs-with-whom from one person's events, or from two people's events when comparing. */
-export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEvent[] | null, options: GraphOptions): ArtistGraph {
+export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEvent[] | null, options: GraphOptions, focus?: Set<string>): ArtistGraph {
   const mine = dedupe(mineEvents);
   const theirs = theirEvents ? dedupe(theirEvents) : new Map<string, GraphEvent>();
   const union = new Map<string, { event: GraphEvent; mine: boolean; theirs: boolean }>();
   for (const [href, event] of mine) union.set(href, { event, mine: true, theirs: theirs.has(href) });
   for (const [href, event] of theirs) if (!union.has(href)) union.set(href, { event, mine: false, theirs: true });
 
-  const stats = new Map<string, { count: number; mine: number; theirs: number; both: number }>();
+  const stats = new Map<string, { count: number; active: number; mine: number; theirs: number; both: number }>();
   const appearances = new Map<string, { href: string; date: string }[]>();
   const pairs = new Map<string, { a: string; b: string; weight: number; mine: number; theirs: number }>();
   let pairEvents = 0;
@@ -112,8 +114,9 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
   for (const { event, mine: inMine, theirs: inTheirs } of union.values()) {
     const artists = [...new Set((event.artists ?? []).filter(Boolean))].sort();
     for (const artist of artists) {
-      const stat = stats.get(artist) ?? { count: 0, mine: 0, theirs: 0, both: 0 };
+      const stat = stats.get(artist) ?? { count: 0, active: 0, mine: 0, theirs: 0, both: 0 };
       stat.count += 1;
+      if (!focus || focus.has(event.href)) stat.active += 1;
       if (inMine) stat.mine += 1;
       if (inTheirs) stat.theirs += 1;
       if (inMine && inTheirs) stat.both += 1;
@@ -162,15 +165,16 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
     degreeOf.set(pair.a, (degreeOf.get(pair.a) ?? 0) + 1);
     degreeOf.set(pair.b, (degreeOf.get(pair.b) ?? 0) + 1);
   }
-  const chosen = kept.filter(([name]) => !options.hideLoners || degreeOf.has(name)).slice(0, options.maxNodes);
+  const chosen = kept.filter(([name]) => !options.hideLoners || degreeOf.has(name));
+  const top = new Set(chosen.slice(0, options.maxNodes).map(([name]) => name));
   const ids = new Set(chosen.map(([name]) => name));
 
   const links: ArtistLink[] = [];
   const degree = new Map<string, number>();
   for (const pair of pairs.values()) {
     if (pair.weight < options.minTogether || !ids.has(pair.a) || !ids.has(pair.b)) continue;
-    const countA = stats.get(pair.a)!.count;
-    const countB = stats.get(pair.b)!.count;
+    const countA = appearances.get(pair.a)!.length;
+    const countB = appearances.get(pair.b)!.length;
     const strength = pair.weight / (countA + countB - pair.weight);
     links.push({ ...pair, strength, closeness: strength * (pair.weight / (pair.weight + 1)) });
     degree.set(pair.a, (degree.get(pair.a) ?? 0) + 1);
@@ -186,9 +190,29 @@ export function buildArtistGraph(mineEvents: GraphEvent[], theirEvents: GraphEve
     degree: degree.get(name) ?? 0
   }));
   const clusters = assignClusters(nodes, links, appearances);
-  return { nodes, links, clusters, pairEvents, skippedEvents };
+  // The cut keeps the most-seen artists, but a group is shown whole: members ranked lower come along
+  const topClusters = new Set(nodes.filter((node) => top.has(node.id) && node.cluster >= 0).map((node) => node.cluster));
+  const active = (node: ArtistNode) => !focus || node.active > 0;
+  const activeClusters = new Set(nodes.filter((node) => active(node) && node.cluster >= 0).map((node) => node.cluster));
+  const shown = nodes.filter((node) => {
+    const wanted = top.has(node.id) || (node.cluster >= 0 && topClusters.has(node.cluster));
+    return wanted && (active(node) || (node.cluster >= 0 && activeClusters.has(node.cluster)));
+  });
+  const shownIds = new Set(shown.map((node) => node.id));
+  return {
+    nodes: shown,
+    links: links.filter((link) => shownIds.has(link.a) && shownIds.has(link.b)),
+    clusters: clusters.filter((cluster) => topClusters.has(cluster.id) && (!focus || activeClusters.has(cluster.id))),
+    pairEvents,
+    skippedEvents
+  };
 }
 
+const MIN_GROUP_STRENGTH = 0.12;
+const RELATIVE_STRENGTH = 0.35;
+const MIN_COHESION = 0.2;
+const UNIT_CONTAINMENT = 0.75;
+const UNIT_MIN_TOGETHER = 3;
 const dayMs = 86400000;
 const daysBetween = (from: string, to: string) => (Date.parse(to) - Date.parse(from)) / dayMs;
 const median = (sorted: string[]) => sorted[Math.floor(sorted.length / 2)];
@@ -270,10 +294,82 @@ function groupsOf(labels: number[], minSize: number) {
   return [...groups.values()].filter((members) => members.length >= minSize);
 }
 
+/**
+ * A group's own name shows up next to its members, and its members rarely appear without it, so the
+ * name connects to many outside acts and Louvain leaves it out of its members' community. Pull such
+ * an artist into the community whose members it contains.
+ */
+function adoptGroupNames(nodes: ArtistNode[], links: ArtistLink[], index: Map<string, number>, appearances: Map<string, { href: string; date: string }[]>, labels: number[]) {
+  const seen = (i: number) => appearances.get(nodes[i].id)?.length ?? 0;
+  const contains = new Map<number, Set<number>>();
+  for (const link of links) {
+    if (link.weight < UNIT_MIN_TOGETHER) continue;
+    const a = index.get(link.a)!;
+    const b = index.get(link.b)!;
+    const [small, big] = seen(a) <= seen(b) ? [a, b] : [b, a];
+    if (seen(small) === seen(big) || link.weight / seen(small) < UNIT_CONTAINMENT) continue;
+    contains.set(big, (contains.get(big) ?? new Set()).add(small));
+  }
+  [...contains.keys()]
+    .sort((x, y) => seen(y) - seen(x))
+    .forEach((name) => {
+      const sizes = new Map<number, number>();
+      for (const label of labels) sizes.set(label, (sizes.get(label) ?? 0) + 1);
+      const hits = new Map<number, number>();
+      for (const member of contains.get(name)!) hits.set(labels[member], (hits.get(labels[member]) ?? 0) + 1);
+      const own = hits.get(labels[name]) ?? 0;
+      hits.delete(labels[name]);
+      const best = [...hits.entries()].filter(([label, count]) => count >= 2 && count > own && count / sizes.get(label)! >= 0.5).sort((x, y) => y[1] - x[1])[0];
+      if (best) labels[name] = best[0];
+    });
+}
+
+/**
+ * A group is people who show up together, not a chain of acts that share some stages. Anyone whose
+ * average closeness to the rest of their group is low goes back to being a single point.
+ */
+function dropIncoherent(nodes: ArtistNode[], links: ArtistLink[], index: Map<string, number>, labels: number[]) {
+  const strength = new Map<number, number>();
+  for (const link of links) {
+    const a = index.get(link.a)!;
+    const b = index.get(link.b)!;
+    strength.set(a * nodes.length + b, link.strength);
+    strength.set(b * nodes.length + a, link.strength);
+  }
+  let next = Math.max(-1, ...labels) + 1;
+  const byLabel = new Map<number, number[]>();
+  labels.forEach((label, i) => byLabel.set(label, [...(byLabel.get(label) ?? []), i]));
+  for (const members of byLabel.values()) {
+    const group = new Set(members);
+    while (group.size >= 2) {
+      let worst = -1;
+      let worstScore = Infinity;
+      for (const i of group) {
+        let total = 0;
+        for (const j of group) if (j !== i) total += strength.get(i * nodes.length + j) ?? 0;
+        const score = total / (group.size - 1);
+        if (score < worstScore) {
+          worst = i;
+          worstScore = score;
+        }
+      }
+      if (worstScore >= MIN_COHESION) break;
+      group.delete(worst);
+      labels[worst] = next++;
+    }
+  }
+}
+
 function assignClusters(nodes: ArtistNode[], links: ArtistLink[], appearances: Map<string, { href: string; date: string }[]>): ArtistCluster[] {
   const index = new Map(nodes.map((node, i) => [node.id, i]));
-  const edges: [number, number, number][] = links.map((link) => [index.get(link.a)!, index.get(link.b)!, link.weight]);
+  const best = new Map<string, number>();
+  for (const link of links) for (const id of [link.a, link.b]) best.set(id, Math.max(best.get(id) ?? 0, link.strength));
+  const edges: [number, number, number][] = links
+    .filter((link) => link.strength >= MIN_GROUP_STRENGTH && link.strength >= RELATIVE_STRENGTH * Math.max(best.get(link.a)!, best.get(link.b)!))
+    .map((link) => [index.get(link.a)!, index.get(link.b)!, link.strength]);
   const labels = louvain(nodes.length, edges);
+  adoptGroupNames(nodes, links, index, appearances, labels);
+  dropIncoherent(nodes, links, index, labels);
   const ordered = groupsOf(labels, 2)
     .map((members) => ({ members, weight: members.reduce((sum, i) => sum + nodes[i].count, 0) }))
     .sort((x, y) => y.members.length - x.members.length || y.weight - x.weight);

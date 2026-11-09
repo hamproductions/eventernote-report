@@ -30,6 +30,7 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
   const [selected, setSelected] = useState<string[]>([]);
   const [input, setInput] = useState('');
   const [inputError, setInputError] = useState('');
+  const [compareOpen, setCompareOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [peopleKind, setPeopleKind] = useState<'following' | 'followers'>('following');
   const [peopleSearch, setPeopleSearch] = useState('');
@@ -54,7 +55,7 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
   const connections = useQuery<{ data: { following: { userId: string }[]; followers: { userId: string }[] } }>({
     queryKey: ['connections-raw', userId],
     queryFn: () => fetchJson(`/api/user-profile/${encodeURIComponent(userId)}/connections`, 'Could not load people'),
-    enabled: peopleOpen,
+    enabled: compareOpen && peopleOpen,
     staleTime: 6 * 60 * 60 * 1000,
     retry: false
   });
@@ -107,21 +108,26 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
 
   return (
-    <VStack as="section" aria-label="Upcoming schedules" gap="6" alignItems="stretch">
-      <Box>
-        <Heading as="h1" size="2xl">Upcoming</Heading>
-        <Text color="fg.muted" mt="2">Your registered events from today onward. Add people to see where your plans meet.</Text>
-      </Box>
+    <VStack as="section" aria-label="Upcoming schedules" gap="4" alignItems="stretch">
+      <HStack justifyContent="space-between" gap="3" flexWrap="wrap" alignItems="flex-start">
+        <Box>
+          <Heading as="h1" size="2xl">Upcoming</Heading>
+          <Text size="sm" color="fg.muted" mt="1">Your Eventernote registrations, from today onward.</Text>
+        </Box>
+        <Button variant="outline" aria-expanded={compareOpen} onClick={() => setCompareOpen(!compareOpen)}>{compareOpen ? 'Hide comparison setup' : 'Compare schedules'}</Button>
+      </HStack>
 
-      <VStack gap="3" alignItems="stretch">
-        <HStack gap="2" flexWrap="wrap">
-          <Text size="sm" fontWeight="semibold">{label(userId)} (you)</Text>
-          {selected.map(id => <Button key={id} variant="outline" size="sm" aria-label={`Remove ${id}`} onClick={() => { setSelected(current => current.filter(user => user !== id)); if (selected.length === 1) setSharedOnly(false); }}>{label(id)} ×</Button>)}
-          <Text size="xs" color="fg.muted">{selected.length}/3 people added</Text>
-        </HStack>
+      {selected.length > 0 && <HStack gap="2" flexWrap="wrap">
+        <Text size="sm" color="fg.muted">Comparing with</Text>
+        {selected.map(id => <Button key={id} variant="outline" size="sm" maxW="full" h="auto" minH="11" whiteSpace="normal" overflowWrap="anywhere" aria-label={`Remove ${id}`} onClick={() => { setSelected(current => current.filter(user => user !== id)); if (selected.length === 1) setSharedOnly(false); }}>{label(id)} ×</Button>)}
+        <Text size="xs" color="fg.muted">{selected.length}/3</Text>
+      </HStack>}
+
+      {compareOpen && <VStack gap="3" alignItems="stretch" bg="bg.subtle" p="4" borderRadius="md">
+        <Text size="sm" fontWeight="medium">Add up to 3 people</Text>
         <form onSubmit={event => { event.preventDefault(); addPerson(input); }}>
           <HStack gap="2" flexWrap="wrap">
-            <input aria-label="Person to add" placeholder="User ID or Eventernote profile URL" value={input} onChange={event => { setInput(event.target.value); setInputError(''); }} disabled={selected.length >= 3} autoCapitalize="none" spellCheck={false} className={css({ flex: '1', minW: '180px' }) + ' ' + control} />
+            <input aria-label="Person to add" placeholder="User ID or profile URL" value={input} onChange={event => { setInput(event.target.value); setInputError(''); }} disabled={selected.length >= 3} autoCapitalize="none" spellCheck={false} className={css({ flex: '1', minW: '160px', maxW: { md: '24rem' } }) + ' ' + control} />
             <Button type="submit" variant="outline" disabled={!input.trim() || selected.length >= 3}>Add person</Button>
             <Button type="button" variant="ghost" aria-expanded={peopleOpen} onClick={() => setPeopleOpen(!peopleOpen)}>{peopleOpen ? 'Hide people' : 'Following / followers'}</Button>
           </HStack>
@@ -129,7 +135,7 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
         </form>
         {selected.length === 3 && <Text size="sm" color="fg.muted">Remove someone to compare another person.</Text>}
         {peopleOpen && (
-          <VStack gap="3" alignItems="stretch" p="4" borderWidth="1px" borderColor="border.subtle" borderRadius="md">
+          <VStack gap="3" alignItems="stretch">
             <HStack gap="2" flexWrap="wrap">
               <Button size="sm" variant={peopleKind === 'following' ? 'solid' : 'outline'} aria-pressed={peopleKind === 'following'} onClick={() => setPeopleKind('following')}>Following</Button>
               <Button size="sm" variant={peopleKind === 'followers' ? 'solid' : 'outline'} aria-pressed={peopleKind === 'followers'} onClick={() => setPeopleKind('followers')}>Followers</Button>
@@ -142,31 +148,40 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
                 <HStack gap="2" flexWrap="wrap">{candidates.slice(0, 100).map(person => <Button key={person.userId} variant="outline" size="sm" disabled={selected.length >= 3} onClick={() => addPerson(person.userId)}>{person.userId}</Button>)}</HStack>
                 {!candidates.length && <Text size="sm" color="fg.muted">No matching people in this list. Enter a user ID above.</Text>}
               </Box>
-              <Text size="xs" color="fg.muted">Available public {peopleKind}; the list may be incomplete. Filter to find more. Schedules load only when you add someone.</Text>
+              <Text size="xs" color="fg.muted">Public {peopleKind} may be incomplete. You can also enter a user ID. Only added people’s schedules are loaded.</Text>
             </>}
           </VStack>
         )}
-      </VStack>
+      </VStack>}
 
-      <HStack justifyContent="space-between" gap="3" flexWrap="wrap">
-        <HStack gap="2" flexWrap="wrap">
+      <HStack justifyContent="space-between" gap="2" flexWrap="wrap" pb="4" borderBottomWidth="1px" borderColor="border.subtle">
+        <HStack gap="1" flexWrap="wrap">
           <Button variant="outline" aria-label="Previous month" disabled={month <= currentMonth} onClick={() => stepMonth(-1)}>‹</Button>
           <input type="month" aria-label="Schedule month" value={month} min={currentMonth} max={maxMonth} onChange={event => { if (event.target.value >= currentMonth && event.target.value <= maxMonth) changeMonth(event.target.value); }} className={control} />
           <Button variant="outline" aria-label="Next month" disabled={month >= maxMonth} onClick={() => stepMonth(1)}>›</Button>
-          <Button variant="ghost" onClick={() => changeMonth(currentMonth)}>Today</Button>
         </HStack>
-        <Button variant="outline" disabled={busy} onClick={() => schedules.forEach(schedule => schedule.refetch())}>Check schedules</Button>
+        <HStack gap="2" flexWrap="wrap">
+          <Button size="sm" variant="ghost" onClick={() => changeMonth(currentMonth)}>Today</Button>
+          <styled.details fontSize="xs" color="fg.muted" position="relative">
+            <styled.summary cursor="pointer" minH="11" display="list-item" listStylePosition="inside" py="3" px="2" textDecoration="underline" textUnderlineOffset="3px">Data updates</styled.summary>
+            <VStack gap="2" alignItems="stretch" p="3" borderWidth="1px" borderColor="border.subtle" borderRadius="md" bg="bg.default" maxW="24rem">
+              <Text size="xs">Schedules are saved for one hour to limit requests to Eventernote. Check schedules reuses saved data until it expires.</Text>
+              {schedules.map((schedule, index) => schedule.data && <Text key={users[index]} size="xs" overflowWrap="anywhere">{label(users[index])}: loaded {new Date(schedule.data.data.loadedAt).toLocaleString()}; next update after {new Date(schedule.data.data.expiresAt).toLocaleTimeString()}.</Text>)}
+              <Text size="xs">Registrations do not confirm tickets. Open an event for current performers, venue and times.</Text>
+            </VStack>
+          </styled.details>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => schedules.forEach(schedule => schedule.refetch())}>Check schedules</Button>
+        </HStack>
       </HStack>
 
-      <VStack gap="2" alignItems="stretch" aria-live="polite">
-        {schedules.map((schedule, index) => <HStack key={users[index]} gap="2" flexWrap="wrap">
-          <Text size="xs" color={schedule.isError ? 'fg.error' : 'fg.muted'}>
-            {label(users[index])}: {schedule.isFetching ? 'Loading schedule…' : schedule.isError ? schedule.error.message : schedule.data ? `Snapshot loaded ${new Date(schedule.data.data.loadedAt).toLocaleString()}. Cached until ${new Date(schedule.data.data.expiresAt).toLocaleTimeString()}.` : ''}
+      {(busy || schedules.some(schedule => schedule.isError)) && <VStack gap="2" alignItems="stretch" aria-live="polite">
+        {schedules.map((schedule, index) => (schedule.isFetching || schedule.isError) && <HStack key={users[index]} gap="2" flexWrap="wrap">
+          <Text size="sm" color={schedule.isError ? 'fg.error' : 'fg.muted'} overflowWrap="anywhere">
+            {label(users[index])}: {schedule.isFetching ? 'Loading schedule…' : schedule.error?.message}
           </Text>
-          {schedule.isError && !schedule.isFetching && <Button size="xs" variant="outline" onClick={() => schedule.refetch()}>Retry {users[index]}</Button>}
+          {schedule.isError && !schedule.isFetching && <Button size="xs" variant="outline" maxW="full" h="auto" minH="11" whiteSpace="normal" overflowWrap="anywhere" onClick={() => schedule.refetch()}>Retry {users[index]}</Button>}
         </HStack>)}
-        <Text size="xs" color="fg.muted">One month at a time. Cached for one hour; checking again reuses the cache. Times and ticket status are not included.</Text>
-      </VStack>
+      </VStack>}
 
       <Grid gridTemplateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(300px, 2fr) minmax(0, 3fr)' }} gap={{ base: '6', lg: '8' }} alignItems="start">
         <Box borderWidth="1px" borderColor="border.subtle" borderRadius="md" p={{ base: '3', md: '5' }} hideBelow="sm">
@@ -184,7 +199,7 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
               </styled.button>;
             })}
           </Grid>
-          <Text size="xs" color="fg.muted" mt="4">Counts are distinct events. A dot marks a shared event. Pick a date to filter the agenda.</Text>
+          <Text size="xs" color="fg.muted" mt="3">Events per day · dot = shared event. Select a date to filter.</Text>
         </Box>
 
         <VStack gap="4" alignItems="stretch">
@@ -195,7 +210,7 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
             </select>
           </label>
           <HStack justifyContent="space-between" gap="2" flexWrap="wrap">
-            <Heading as="h2" size="lg">{day ? new Date(`${day}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'This month’s plans'}</Heading>
+            <Heading as="h2" size="lg">{day ? new Date(`${day}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Agenda'}</Heading>
             <HStack gap="2" flexWrap="wrap">
               {day && <Button size="sm" variant="ghost" onClick={() => setDay(null)}>All dates</Button>}
               <Button size="sm" variant={sharedOnly ? 'solid' : 'outline'} aria-pressed={sharedOnly} disabled={!selected.length} onClick={() => setSharedOnly(!sharedOnly)}>Shared only</Button>
@@ -206,15 +221,15 @@ export function UpcomingSchedule({ userId, recentUsers }: UpcomingScheduleProps)
           {visibleDays.map(([date, items]) => <VStack key={date} gap="3" alignItems="stretch">
             <HStack gap="3" flexWrap="wrap" borderBottomWidth="1px" borderColor="border.subtle" pb="2">
               <Text as="h3" fontWeight="semibold">{new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{date === today ? ' · Today' : ''}</Text>
-              {items.length > 1 && <Text size="xs" color="fg.muted">{items.length} different events on this day; times not checked</Text>}
+              {items.length > 1 && <Text size="xs" color="fg.muted">{items.length} events · times may overlap</Text>}
             </HStack>
             {items.filter(event => !sharedOnly || event.users.length > 1).map(event => <Box as="article" key={event.href} pb="3">
               <styled.a href={`https://www.eventernote.com${event.href}`} target="_blank" rel="noopener noreferrer" display="block" py="2" minH="11" fontWeight="medium" overflowWrap="anywhere" _hover={{ textDecoration: 'underline' }}>{event.name}</styled.a>
               <Text size="sm" color="fg.muted" overflowWrap="anywhere">{event.place || 'Venue not listed'}</Text>
-              <Text size="sm" mt="2" color={event.users.length > 1 ? 'colorPalette.text' : 'fg.muted'} overflowWrap="anywhere">{event.users.length > 1 ? 'Shared · ' : ''}{event.users.map(id => id === userId ? `${label(id)} (you)` : label(id)).join(', ')}</Text>
+              {selected.length > 0 && <Text size="sm" mt="1" color={event.users.length > 1 ? 'colorPalette.text' : 'fg.muted'} overflowWrap="anywhere">{event.users.length > 1 ? 'Shared · ' : ''}{event.users.map(id => id === userId ? 'You' : label(id)).join(', ')}</Text>}
             </Box>)}
           </VStack>)}
-          <Text size="xs" color="fg.muted">Registrations come from Eventernote’s public lists. Open an event for the latest venue, performers and times. A registration is not a ticket confirmation.</Text>
+          <Text size="xs" color="fg.muted">Eventernote registrations · open an event for details and times.</Text>
         </VStack>
       </Grid>
     </VStack>

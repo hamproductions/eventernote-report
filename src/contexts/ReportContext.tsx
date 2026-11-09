@@ -75,7 +75,11 @@ export function ReportProvider({ children }: { children: ReactNode }) {
   const handleSetUserId = (id: string | null) => {
     setUserId(id);
     if (new URLSearchParams(window.location.search).get('user') !== id) {
-      window.history.pushState(null, '', id ? `?user=${encodeURIComponent(id)}` : window.location.pathname);
+      const url = new URL(window.location.href);
+      if (id) url.searchParams.set('user', id);
+      else url.searchParams.delete('user');
+      url.hash = '';
+      window.history.pushState(null, '', url);
     }
     if (id) {
       localStorage.setItem('eventernote-user-id', id);

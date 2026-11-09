@@ -28,6 +28,8 @@ export const DASHBOARD_SECTIONS = [
 ] as const;
 
 interface DashboardHeaderProps {
+  view: 'report' | 'upcoming';
+  onViewChange: (view: 'report' | 'upcoming') => void;
   userId: string;
   colorMode: string | null | undefined;
   userProfile?: UserProfileData | null;
@@ -107,6 +109,8 @@ function useActiveSection(enabled: boolean) {
 }
 
 export function DashboardHeader({
+  view,
+  onViewChange,
   userId,
   colorMode,
   userProfile,
@@ -165,17 +169,17 @@ export function DashboardHeader({
             </HStack>
           </VStack>
           <HStack gap="2" flexShrink="0">
-            <Button size="sm" onClick={onOpenReceipt}>
+            <Button size="sm" onClick={onOpenReceipt} display={view === 'upcoming' ? 'none' : undefined}>
               <ReceiptText /> <Box as="span" hideBelow="sm">Print receipt</Box><Box as="span" hideFrom="sm">Receipt</Box>
             </Button>
-            <Button size="sm" variant="outline" onClick={onOpenCompare} hideBelow="md">
+            <Button size="sm" variant="outline" onClick={onOpenCompare} hideBelow="md" display={view === 'upcoming' ? 'none' : undefined}>
               <Users /> Compare
             </Button>
-            <Button size="sm" variant="outline" onClick={onExportStats} hideBelow="lg">
+            <Button size="sm" variant="outline" onClick={onExportStats} hideBelow="lg" display={view === 'upcoming' ? 'none' : undefined}>
               <Download /> Save image
             </Button>
             <HStack gap="1" hideBelow="md">
-              <IconButton size="sm" variant="ghost" aria-label="Reload from Eventernote" title="Reload from Eventernote (picks up registrations you just changed)" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing}>
+              <IconButton size="sm" variant="ghost" aria-label="Reload from Eventernote" title="Reload from Eventernote (picks up registrations you just changed)" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing} display={view === 'upcoming' ? 'none' : undefined}>
                 <RefreshCw className={refreshing ? css({ animation: "spin" }) : undefined} />
               </IconButton>
               <IconButton size="sm" variant="ghost" aria-label={colorMode === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleColorMode}>
@@ -196,16 +200,16 @@ export function DashboardHeader({
               }}
             >
               <Menu.Trigger asChild>
-                <IconButton size="sm" variant="outline" aria-label="More actions" hideFrom="lg">
+                <IconButton size="sm" variant="outline" aria-label="More actions" hideFrom={view === 'upcoming' ? 'md' : 'lg'}>
                   <Ellipsis />
                 </IconButton>
               </Menu.Trigger>
               <Portal>
                 <Menu.Positioner>
                   <Menu.Content minW="52">
-                    <Menu.Item gap="2" value="compare" hideFrom="md"><Users /> Compare with someone</Menu.Item>
-                    <Menu.Item gap="2" value="save"><Download /> Save image</Menu.Item>
-                    <Menu.Item gap="2" value="reload" hideFrom="md" disabled={refreshing}><RefreshCw /> Reload from Eventernote</Menu.Item>
+                    {view === 'report' && <Menu.Item gap="2" value="compare" hideFrom="md"><Users /> Compare with someone</Menu.Item>}
+                    {view === 'report' && <Menu.Item gap="2" value="save"><Download /> Save image</Menu.Item>}
+                    {view === 'report' && <Menu.Item gap="2" value="reload" hideFrom="md" disabled={refreshing}><RefreshCw /> Reload from Eventernote</Menu.Item>}
                     <Menu.Item gap="2" value="theme" hideFrom="md">{colorMode === "dark" ? <Sun /> : <Moon />} {colorMode === "dark" ? "Light mode" : "Dark mode"}</Menu.Item>
                     <Menu.Item gap="2" value="user" hideFrom="md"><LogOut /> Change user</Menu.Item>
                   </Menu.Content>
@@ -215,7 +219,7 @@ export function DashboardHeader({
           </HStack>
         </HStack>
 
-        {userProfile && (
+        {view === 'report' && userProfile && (
           <HStack gap="1" flexWrap="wrap" fontSize="xs" color="fg.muted">
             <styled.button type="button" onClick={() => onOpenPeople("following")} display="inline-flex" alignItems="center" minH={{ base: "11", md: "auto" }} cursor="pointer" textDecoration="underline" textDecorationColor="fg.subtle" textUnderlineOffset="3px" _hover={{ color: "fg.default" }}>
               {userProfile.following} following
@@ -231,9 +235,14 @@ export function DashboardHeader({
           </HStack>
         )}
 
-        {filters}
+        <HStack gap="2" aria-label="Dashboard view" pb={view === 'upcoming' ? '3' : '0'}>
+          <Button size="sm" variant={view === 'report' ? 'solid' : 'ghost'} aria-pressed={view === 'report'} onClick={() => onViewChange('report')}>Report</Button>
+          <Button size="sm" variant={view === 'upcoming' ? 'solid' : 'ghost'} aria-pressed={view === 'upcoming'} onClick={() => onViewChange('upcoming')}>Upcoming</Button>
+        </HStack>
 
-        <HStack as="nav" ref={navRef} aria-label="Report sections" gap="1" overflowX="auto" mb="-1px" visibility={showSections ? "visible" : "hidden"}>
+        {view === 'report' && filters}
+
+        <HStack as="nav" ref={navRef} aria-label="Report sections" gap="1" overflowX="auto" mb="-1px" visibility={showSections ? "visible" : "hidden"} display={view === 'upcoming' ? 'none' : 'flex'}>
           {DASHBOARD_SECTIONS.map(([id, label, short]) => (
             <styled.a
               key={id}

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "panda codegen && nodemon",
     "build": "bun run build:ssr && bun run build:server",
-    "build:ssr": "panda codegen && bunx --bun vike build",
+    "build:ssr": "NODE_ENV=production panda codegen && NODE_ENV=production bunx --bun vike build",
     "build:server": "bun build src/server/index.ts --outfile=./build/server --compile",
     "start:prod": "NODE_ENV=production bun run src/server/index.ts",
     "db:generate": "drizzle-kit generate",

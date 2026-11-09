@@ -3,8 +3,26 @@ import { fetchAttendedEvents, searchEvents } from '../crawlers';
 import type { SearchedEvent } from '../crawlers';
 import { cache } from '../services/cache';
 import { attendanceCacheKey, getAttendanceProgress } from '../crawlers/attendedEvents';
+import { fetchSchedule, scheduleMonthRange } from '../services/schedules';
 
 export const eventRoutes = new Elysia({ prefix: '/events' })
+  .get('/user/:userId/schedule', async ({ params, query, set }) => {
+    try {
+      scheduleMonthRange(query.month);
+    } catch (error) {
+      set.status = 400;
+      return { success: false, error: error instanceof Error ? error.message : 'Invalid month' };
+    }
+    try {
+      return { success: true, data: await fetchSchedule(params.userId, query.month) };
+    } catch (error) {
+      set.status = 502;
+      return { success: false, error: error instanceof Error ? error.message : 'Could not load schedule' };
+    }
+  }, {
+    params: t.Object({ userId: t.String({ minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' }) }),
+    query: t.Object({ month: t.String() })
+  })
   .get('/user/:userId/progress', ({ params, query }) =>
     getAttendanceProgress(params.userId, query.startDate, query.endDate), {
     params: t.Object({ userId: t.String() }),

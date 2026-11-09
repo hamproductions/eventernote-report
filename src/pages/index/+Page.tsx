@@ -38,6 +38,7 @@ import { CompareDrawer } from '~/components/dashboard/CompareDrawer';
 import { ConnectionsSection } from '~/components/connections/ConnectionsSection';
 import { ShareImageDrawer } from '~/components/share/ShareImageDrawer';
 import type { PosterData } from '~/components/share/SharePoster';
+import { UpcomingSchedule } from '~/components/dashboard/UpcomingSchedule';
 
 interface EventsResponse {
   success: boolean;
@@ -80,6 +81,22 @@ interface UserProfileResponse {
 }
 
 export default function Page() {
+  const [view, setView] = useState<'report' | 'upcoming' | null>(null);
+  useEffect(() => {
+    const syncView = () => setView(new URLSearchParams(window.location.search).get('view') === 'upcoming' ? 'upcoming' : 'report');
+    syncView();
+    window.addEventListener('popstate', syncView);
+    return () => window.removeEventListener('popstate', syncView);
+  }, []);
+  const changeView = (next: 'report' | 'upcoming') => {
+    const url = new URL(window.location.href);
+    if (next === 'upcoming') url.searchParams.set('view', 'upcoming');
+    else url.searchParams.delete('view');
+    url.hash = '';
+    window.history.pushState(null, '', url);
+    setView(next);
+    window.scrollTo({ top: 0 });
+  };
   const { userId, setUserId, dateRange, setDateRange, recentUsers, rememberUser, forgetUser } = useReport();
   const { colorMode, setColorMode } = useColorMode();
   const [inputValue, setInputValue] = useState(userId || '');
@@ -141,7 +158,7 @@ export default function Page() {
 
       return fetchJson<EventsResponse>(`/api/events/user/${encodeURIComponent(userId!)}?${params}`, 'Could not load events');
     },
-    enabled: !!userId,
+    enabled: !!userId && view === 'report',
     retry: false,
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
@@ -153,7 +170,7 @@ export default function Page() {
     queryFn: async () => {
       return fetchJson<FavoriteArtistsResponse>(`/api/favorite-artists/user/${encodeURIComponent(userId!)}`, 'Could not load favorite artists');
     },
-    enabled: !!userId
+    enabled: !!userId && view === 'report'
   });
 
   const { data: loadingProgress } = useQuery<{ stage: string; loaded: number; total: number }>({
@@ -166,7 +183,7 @@ export default function Page() {
       if (!response.ok) throw new Error('Failed to fetch loading progress');
       return response.json();
     },
-    enabled: !!userId && isFetching,
+    enabled: !!userId && view === 'report' && isFetching,
     refetchInterval: isFetching ? 1500 : false,
     retry: false
   });
@@ -179,7 +196,7 @@ export default function Page() {
       if (dateRangeKey.end) params.set('endDate', dateRangeKey.end);
       return fetchJson<UserProfileResponse>(`/api/user-profile/${encodeURIComponent(userId!)}?${params}`, 'Could not load favorite attendance');
     },
-    enabled: !!userId,
+    enabled: !!userId && view === 'report',
     staleTime: 1000 * 60 * 30
   });
 
@@ -676,12 +693,14 @@ export default function Page() {
   return (
     <Box bg="bg.default" colorPalette="blue" minH="100vh" position="relative" overflowX="clip" px={{ base: '4', md: '8' }} pb={{ base: '10', md: '16' }}>
       <DashboardHeader
+        view={view || 'report'}
+        onViewChange={changeView}
         userId={userId}
         colorMode={colorMode}
         userProfile={userProfileData?.data}
-        attendedCount={analytics ? chartFilteredEvents.length : undefined}
+        attendedCount={view === 'report' && analytics ? chartFilteredEvents.length : undefined}
         favoritesOnly={filterByFavorites}
-        showSections={!!analytics}
+        showSections={view === 'report' && !!analytics}
         onOpenReceipt={() => setReceiptOpen(true)}
         onOpenCompare={() => setCompareOpen(true)}
         onRefresh={refreshFromEventernote}
@@ -709,6 +728,7 @@ export default function Page() {
       />
 
       <VStack as="main" gap={{ base: '10', md: '14' }} alignItems="stretch" maxW="1400px" mx="auto" pt="6">
+        {view === 'upcoming' ? <UpcomingSchedule key={userId} userId={userId} recentUsers={recentUsers} /> : <>
         {(isFetching || isProfileLoading || profileError || isError) && (
           <VStack gap="3" alignItems="stretch">
             {isFetching && (
@@ -846,6 +866,7 @@ export default function Page() {
           </Box>
         )}
 
+        </>}
       </VStack>
 
       <ShareImageDrawer open={shareOpen} onOpenChange={setShareOpen} data={posterData} />

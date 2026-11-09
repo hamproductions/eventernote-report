@@ -130,6 +130,7 @@ async function crawlRegisteredEvents(userId: string, startDate?: string, endDate
     .filter(event => (!startDate || event.date.slice(0, 10) >= startDate) && (!endDate || event.date.slice(0, 10) <= endDate))
     .sort((a, b) => b.date.localeCompare(a.date));
   cache.set(`registered-${attendanceCacheKey(userId, startDate, endDate)}`, result, 60 * 60);
+  cache.set(`registered-loaded-at:${attendanceCacheKey(userId, startDate, endDate)}`, new Date().toISOString(), 60 * 60);
   return result;
 }
 

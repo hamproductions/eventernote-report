@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { fetchAttendedEvents, searchEvents } from '../crawlers';
 import type { SearchedEvent } from '../crawlers';
 import { cache } from '../services/cache';
-import { attendanceCacheKey, getAttendanceProgress } from '../crawlers/attendedEvents';
+import { attendanceCacheKey, fetchRegisteredEvents, getAttendanceProgress } from '../crawlers/attendedEvents';
 import { fetchSchedule, scheduleMonthRange } from '../services/schedules';
 
 export const eventRoutes = new Elysia({ prefix: '/events' })
@@ -32,7 +32,8 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
     '/user/:userId',
     async ({ params, query }) => {
       const { userId } = params;
-      const { startDate, endDate, refresh } = query;
+      const { startDate, endDate, refresh, includeArtists } = query;
+      const skipArtists = includeArtists === '0' || includeArtists === 'false';
 
       try {
         console.log(`📡 Fetching events for user: ${userId}`);
@@ -53,6 +54,25 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
               events: cached,
               totalCount: cached.length,
               cached: true
+            }
+          };
+        }
+
+        if (skipArtists) {
+          const registeredKey = `registered-${cacheKey}`;
+          const wasCached = Boolean(cache.get<any[]>(registeredKey));
+          const registrations = await fetchRegisteredEvents(userId, startDate, endDate);
+          const events = registrations.filter(event =>
+            (!startDate || event.date.slice(0, 10) >= startDate) &&
+            (!endDate || event.date.slice(0, 10) <= endDate)
+          );
+          console.log(`⚡ Returning ${events.length} registered events (skipArtists, cached=${wasCached})`);
+          return {
+            success: true,
+            data: {
+              events,
+              totalCount: events.length,
+              cached: wasCached
             }
           };
         }
@@ -98,7 +118,8 @@ export const eventRoutes = new Elysia({ prefix: '/events' })
       query: t.Object({
         startDate: t.Optional(t.String()),
         endDate: t.Optional(t.String()),
-        refresh: t.Optional(t.String())
+        refresh: t.Optional(t.String()),
+        includeArtists: t.Optional(t.String())
       })
     }
   )

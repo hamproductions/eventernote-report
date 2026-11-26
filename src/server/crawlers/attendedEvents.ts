@@ -65,6 +65,45 @@ async function crawlRegisteredEvents(userId: string, startDate?: string, endDate
   const expectedCount = Number(document.title.match(/参加イベント一覧 \((\d+)\)/)?.[1]);
   if (!Number.isFinite(expectedCount)) throw new Error('Attendance list not found');
 
+  if (!startDate && !endDate) {
+    const { document: fullDoc } = parseHTML(await readEventernote(origin + path + '?limit=10000', 2));
+    const fullRows = fullDoc.querySelectorAll('div.gb_event_list.clearfix > ul > li');
+    if (fullRows.length >= expectedCount) {
+      const fastEvents = new Map<string, EnhancedEvent>();
+      let ok = true;
+      for (const row of fullRows) {
+        const link = row.querySelector('div.event > h4 > a');
+        const href = link?.getAttribute('href');
+        const name = link?.textContent?.trim();
+        const date = row.querySelector('div.date > p')?.textContent?.trim();
+        const place = row.querySelector('div.place > a')?.textContent?.trim() || '';
+        const attendees = Number(row.querySelector('div.note_count p')?.textContent?.trim());
+        if (!href || !name || !date) { ok = false; break; }
+        if (fastEvents.has(href)) continue;
+        const parsedDate = new Date(`${date.slice(0, 10)}T00:00:00`);
+        if (Number.isNaN(parsedDate.getTime())) { ok = false; break; }
+        fastEvents.set(href, {
+          name,
+          href,
+          date,
+          place,
+          artists: [],
+          attendees: Number.isFinite(attendees) ? attendees : undefined,
+          parsedDate,
+          dayOfWeek: parsedDate.toLocaleDateString('en-US', { weekday: 'long' }),
+          month: parsedDate.toLocaleDateString('en-US', { month: 'long' }),
+          year: parsedDate.getFullYear()
+        });
+      }
+      if (ok && fastEvents.size > 0) {
+        const fastResult = Array.from(fastEvents.values()).sort((a, b) => b.date.localeCompare(a.date));
+        cache.set(`registered-${attendanceCacheKey(userId, startDate, endDate)}`, fastResult, 60 * 60);
+        cache.set(`registered-loaded-at:${attendanceCacheKey(userId, startDate, endDate)}`, new Date().toISOString(), 60 * 60);
+        return fastResult;
+      }
+    }
+  }
+
   const months = Array.from(document.querySelectorAll('a'))
     .filter(link => {
       const href = link.getAttribute('href');
